@@ -6,9 +6,8 @@
 <title>Kaptain Krochet — poste de pilotage</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <style>
   html,body{margin:0;padding:0;background:#071019}
   #root{min-height:100vh}
@@ -23,59 +22,113 @@
   <h2>⚓ Le navire n'a pas pu appareiller</h2>
   <p>Détail de l'erreur (montre-le à Claude) :</p>
   <p><code id="kk-err">—</code></p>
-  <p style="color:#7c97a8;font-size:13px">Cause la plus fréquente : pas de connexion internet au chargement (React/Babel se chargent depuis le web la première fois).</p>
+  <p style="color:#7c97a8;font-size:13px">Cause possible : pas de connexion au chargement (React se charge depuis le web).</p>
 </div>
 
 <script>
-// Filet de sécurité : capture toute erreur et l'affiche au lieu d'un écran noir
 window.addEventListener('error', function(e){
-  var fb=document.getElementById('kk-fallback');
-  var err=document.getElementById('kk-err');
-  if(fb&&err){ fb.style.display='block'; err.textContent=(e.message||'erreur inconnue')+' — '+(e.filename||''); }
+  var fb=document.getElementById('kk-fallback'), err=document.getElementById('kk-err');
+  if(fb&&err){ fb.style.display='block'; err.textContent=(e.message||'erreur inconnue'); }
 });
-// Vérifie que les CDN sont bien chargés
 window.addEventListener('load', function(){
   setTimeout(function(){
-    if(typeof React==='undefined'||typeof ReactDOM==='undefined'||typeof Babel==='undefined'){
-      var fb=document.getElementById('kk-fallback');
-      var err=document.getElementById('kk-err');
-      if(fb&&err){ fb.style.display='block';
-        err.textContent='Librairies non chargées (React='+(typeof React)+', ReactDOM='+(typeof ReactDOM)+', Babel='+(typeof Babel)+'). Probable souci de connexion au CDN unpkg.'; }
+    if(typeof React==='undefined'||typeof ReactDOM==='undefined'){
+      var fb=document.getElementById('kk-fallback'), err=document.getElementById('kk-err');
+      if(fb&&err){ fb.style.display='block'; err.textContent='React non chargé (souci connexion CDN unpkg).'; }
     }
   }, 2500);
 });
 </script>
 
-<script type="text/babel">
+<script>
 const { useState, useEffect, useMemo, useRef } = React;
 
+"use strict";
 /* ---------- Icônes (SVG inline, équivalentes lucide-react) ---------- */
-const Ico = ({ size = 24, children, className = "" }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width={size} height={size}
-    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-    strokeLinecap="round" strokeLinejoin="round">{children}</svg>
-);
-const Anchor = (p) => <Ico {...p}><circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></Ico>;
-const Menu = (p) => <Ico {...p}><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></Ico>;
-const X = (p) => <Ico {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ico>;
-const Activity = (p) => <Ico {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></Ico>;
-const MousePointerClick = (p) => <Ico {...p}><path d="m9 9 5 12 1.8-5.2L21 14Z"/><path d="M7.2 2.2 8 5.1"/><path d="m5.1 8-2.9-.8"/><path d="M14 4.1 12 6"/><path d="m6 12-1.9 2"/></Ico>;
-const Repeat = (p) => <Ico {...p}><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></Ico>;
-const AlertTriangle = (p) => <Ico {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Ico>;
-const Bug = (p) => <Ico {...p}><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></Ico>;
-const Plus = (p) => <Ico {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Ico>;
-const Users = (p) => <Ico {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Ico>;
-const Settings = (p) => <Ico {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/></Ico>;
-const Gauge = (p) => <Ico {...p}><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></Ico>;
-const Camera = (p) => <Ico {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></Ico>;
-const Play = (p) => <Ico {...p}><polygon points="5 3 19 12 5 21 5 3"/></Ico>;
-const Pause = (p) => <Ico {...p}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></Ico>;
-const Search = (p) => <Ico {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ico>;
-const ShieldAlert = (p) => <Ico {...p}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></Ico>;
-const Radio = (p) => <Ico {...p}><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></Ico>;
-const ChevronRight = (p) => <Ico {...p}><polyline points="9 18 15 12 9 6"/></Ico>;
-const Power = (p) => <Ico {...p}><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></Ico>;
-const Eye = (p) => <Ico {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Ico>;
+const Ico = ({ size = 24, children, className = "" }) => (React.createElement("svg", { className: className, xmlns: "http://www.w3.org/2000/svg", width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }, children));
+const Anchor = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("circle", { cx: "12", cy: "5", r: "3" }),
+    React.createElement("line", { x1: "12", y1: "22", x2: "12", y2: "8" }),
+    React.createElement("path", { d: "M5 12H2a10 10 0 0 0 20 0h-3" }));
+const Menu = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("line", { x1: "4", y1: "6", x2: "20", y2: "6" }),
+    React.createElement("line", { x1: "4", y1: "12", x2: "20", y2: "12" }),
+    React.createElement("line", { x1: "4", y1: "18", x2: "20", y2: "18" }));
+const X = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
+    React.createElement("line", { x1: "6", y1: "6", x2: "18", y2: "18" }));
+const Activity = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("polyline", { points: "22 12 18 12 15 21 9 3 6 12 2 12" }));
+const MousePointerClick = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "m9 9 5 12 1.8-5.2L21 14Z" }),
+    React.createElement("path", { d: "M7.2 2.2 8 5.1" }),
+    React.createElement("path", { d: "m5.1 8-2.9-.8" }),
+    React.createElement("path", { d: "M14 4.1 12 6" }),
+    React.createElement("path", { d: "m6 12-1.9 2" }));
+const Repeat = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "m17 2 4 4-4 4" }),
+    React.createElement("path", { d: "M3 11v-1a4 4 0 0 1 4-4h14" }),
+    React.createElement("path", { d: "m7 22-4-4 4-4" }),
+    React.createElement("path", { d: "M21 13v1a4 4 0 0 1-4 4H3" }));
+const AlertTriangle = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" }),
+    React.createElement("line", { x1: "12", y1: "9", x2: "12", y2: "13" }),
+    React.createElement("line", { x1: "12", y1: "17", x2: "12.01", y2: "17" }));
+const Bug = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "m8 2 1.88 1.88" }),
+    React.createElement("path", { d: "M14.12 3.88 16 2" }),
+    React.createElement("path", { d: "M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" }),
+    React.createElement("path", { d: "M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" }),
+    React.createElement("path", { d: "M12 20v-9" }),
+    React.createElement("path", { d: "M6.53 9C4.6 8.8 3 7.1 3 5" }),
+    React.createElement("path", { d: "M6 13H2" }),
+    React.createElement("path", { d: "M3 21c0-2.1 1.7-3.9 3.8-4" }),
+    React.createElement("path", { d: "M20.97 5c0 2.1-1.6 3.8-3.5 4" }),
+    React.createElement("path", { d: "M22 13h-4" }),
+    React.createElement("path", { d: "M17.2 17c2.1.1 3.8 1.9 3.8 4" }));
+const Plus = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("line", { x1: "12", y1: "5", x2: "12", y2: "19" }),
+    React.createElement("line", { x1: "5", y1: "12", x2: "19", y2: "12" }));
+const Users = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }),
+    React.createElement("circle", { cx: "9", cy: "7", r: "4" }),
+    React.createElement("path", { d: "M22 21v-2a4 4 0 0 0-3-3.87" }),
+    React.createElement("path", { d: "M16 3.13a4 4 0 0 1 0 7.75" }));
+const Settings = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" }),
+    React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
+const Gauge = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "m12 14 4-4" }),
+    React.createElement("path", { d: "M3.34 19a10 10 0 1 1 17.32 0" }));
+const Camera = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" }),
+    React.createElement("circle", { cx: "12", cy: "13", r: "3" }));
+const Play = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("polygon", { points: "5 3 19 12 5 21 5 3" }));
+const Pause = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("rect", { x: "6", y: "4", width: "4", height: "16" }),
+    React.createElement("rect", { x: "14", y: "4", width: "4", height: "16" }));
+const Search = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("circle", { cx: "11", cy: "11", r: "8" }),
+    React.createElement("line", { x1: "21", y1: "21", x2: "16.65", y2: "16.65" }));
+const ShieldAlert = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" }),
+    React.createElement("path", { d: "M12 8v4" }),
+    React.createElement("path", { d: "M12 16h.01" }));
+const Radio = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M4.9 19.1C1 15.2 1 8.8 4.9 4.9" }),
+    React.createElement("path", { d: "M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" }),
+    React.createElement("circle", { cx: "12", cy: "12", r: "2" }),
+    React.createElement("path", { d: "M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" }),
+    React.createElement("path", { d: "M19.1 4.9C23 8.8 23 15.1 19.1 19" }));
+const ChevronRight = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("polyline", { points: "9 18 15 12 9 6" }));
+const Power = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M12 2v10" }),
+    React.createElement("path", { d: "M18.4 6.6a9 9 0 1 1-12.77.04" }));
+const Eye = (p) => React.createElement(Ico, Object.assign({}, p),
+    React.createElement("path", { d: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" }),
+    React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
 /* ============================================================
    KAPTAIN KROCHET — Poste de pilotage
    Architecture "worker idiot + cerveau central" :
@@ -84,520 +137,420 @@ const Eye = (p) => <Ico {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-1
    - Conçu pour afficher 10 / 1000 / 10000 matelots sans changer le code :
      on lit une table d'état, on agrège, on virtualise la liste.
    ============================================================ */
-
 /* ---------- COUCHE DONNÉES (mock -> remplacer par Supabase) ----------
    Pour brancher Supabase plus tard, remplace le corps de chaque fonction
    par un appel supabase.from('bots')... Le reste de l'app ne bouge pas. */
 const SCENARIOS = [
-  { id: "clicker_a", nom: "Récolte — Jeu A", couleur: "#e8b04b" },
-  { id: "clicker_b", nom: "Récolte — Jeu B", couleur: "#5fb0c4" },
-  { id: "daily_c",   nom: "Tour quotidien — Jeu C", couleur: "#c47a5f" },
+    { id: "clicker_a", nom: "Récolte — Jeu A", couleur: "#e8b04b" },
+    { id: "clicker_b", nom: "Récolte — Jeu B", couleur: "#5fb0c4" },
+    { id: "daily_c", nom: "Tour quotidien — Jeu C", couleur: "#c47a5f" },
 ];
 const PROPRIOS = ["Toi", "Mehdi", "Sofiane", "Yanis", "Rayan"];
-
 function genFlotte(n) {
-  const arr = [];
-  for (let i = 1; i <= n; i++) {
-    const sc = SCENARIOS[i % SCENARIOS.length];
-    const bug = Math.random() < 0.06;
-    const anomalies = Math.random() < 0.12 ? Math.floor(Math.random() * 4) + 1 : 0;
-    arr.push({
-      id: i,
-      nom: `Matelot ${String(i).padStart(3, "0")}`,
-      proprio: PROPRIOS[i % PROPRIOS.length],
-      scenario: sc.id,
-      scenarioNom: sc.nom,
-      couleur: sc.couleur,
-      clics: Math.floor(Math.random() * 9000) + 100,
-      ipChanges: Math.floor(Math.random() * 14),
-      anomalies,
-      etat: bug ? "buggé" : Math.random() < 0.78 ? "en mer" : "à quai",
-      dernierBattement: bug ? 240 + Math.floor(Math.random() * 600) : Math.floor(Math.random() * 14),
-    });
-  }
-  return arr;
+    const arr = [];
+    for (let i = 1; i <= n; i++) {
+        const sc = SCENARIOS[i % SCENARIOS.length];
+        const bug = Math.random() < 0.06;
+        const anomalies = Math.random() < 0.12 ? Math.floor(Math.random() * 4) + 1 : 0;
+        arr.push({
+            id: i,
+            nom: `Matelot ${String(i).padStart(3, "0")}`,
+            proprio: PROPRIOS[i % PROPRIOS.length],
+            scenario: sc.id,
+            scenarioNom: sc.nom,
+            couleur: sc.couleur,
+            clics: Math.floor(Math.random() * 9000) + 100,
+            ipChanges: Math.floor(Math.random() * 14),
+            anomalies,
+            etat: bug ? "buggé" : Math.random() < 0.78 ? "en mer" : "à quai",
+            dernierBattement: bug ? 240 + Math.floor(Math.random() * 600) : Math.floor(Math.random() * 14),
+        });
+    }
+    return arr;
 }
-
 const api = {
-  async getFlotte() { return genFlotte(48); },          // <- supabase.from('bots').select()
-  async toggleBot(id) { return { ok: true, id }; },      // <- update etat
+    async getFlotte() { return genFlotte(48); }, // <- supabase.from('bots').select()
+    async toggleBot(id) { return { ok: true, id }; }, // <- update etat
 };
-
 /* ---------- Helpers ---------- */
 const fmt = (n) => n.toLocaleString("fr-FR");
-const etatColor = (e) =>
-  e === "en mer" ? "var(--vert)" : e === "à quai" ? "var(--brume)" : "var(--rouge)";
-
+const etatColor = (e) => e === "en mer" ? "var(--vert)" : e === "à quai" ? "var(--brume)" : "var(--rouge)";
 /* ====================================================================== */
 function KaptainKrochet() {
-  const [flotte, setFlotte] = useState([]);
-  const [menuOuvert, setMenuOuvert] = useState(false);
-  const [vue, setVue] = useState("pont"); // pont | equipage | comptes | recrue | reglages
-  const [selection, setSelection] = useState(null);
-  const [recherche, setRecherche] = useState("");
-
-  useEffect(() => { api.getFlotte().then(setFlotte); }, []);
-
-  // Battement live simulé (remplacé par un canal realtime Supabase)
-  useEffect(() => {
-    const t = setInterval(() => {
-      setFlotte((f) =>
-        f.map((b) =>
-          b.etat === "en mer" && Math.random() < 0.5
-            ? { ...b, clics: b.clics + 1, dernierBattement: Math.floor(Math.random() * 8) }
-            : b
-        )
-      );
-    }, 1600);
-    return () => clearInterval(t);
-  }, []);
-
-  const stats = useMemo(() => {
-    const total = flotte.length;
-    const enMer = flotte.filter((b) => b.etat === "en mer").length;
-    const bugs = flotte.filter((b) => b.etat === "buggé").length;
-    const clics = flotte.reduce((s, b) => s + b.clics, 0);
-    const ip = flotte.reduce((s, b) => s + b.ipChanges, 0);
-    const anomalies = flotte.reduce((s, b) => s + b.anomalies, 0);
-    return { total, enMer, bugs, clics, ip, anomalies };
-  }, [flotte]);
-
-  const flotteFiltree = useMemo(() => {
-    if (!recherche.trim()) return flotte;
-    const q = recherche.toLowerCase();
-    return flotte.filter(
-      (b) => b.nom.toLowerCase().includes(q) || b.proprio.toLowerCase().includes(q)
-    );
-  }, [flotte, recherche]);
-
-  const naviguer = (v) => { setVue(v); setMenuOuvert(false); setSelection(null); };
-
-  return (
-    <div className="kk-root">
-      <style>{CSS}</style>
-
-      {/* ---------- BARRE DE PONT ---------- */}
-      <header className="kk-bar">
-        <button className="kk-burger" onClick={() => setMenuOuvert(true)} aria-label="Ouvrir le journal de bord">
-          <Menu size={22} />
-        </button>
-        <div className="kk-brand">
-          <Anchor size={20} className="kk-anchor" />
-          <div className="kk-brand-txt">
-            <span className="kk-name">KAPTAIN KROCHET</span>
-            <span className="kk-sub">poste de pilotage</span>
-          </div>
-        </div>
-        <div className={`kk-radio ${stats.bugs ? "alerte" : ""}`}>
-          <Radio size={14} />
-          <span>{stats.bugs ? `un homme à la mer ! (${stats.bugs})` : "flotte stable"}</span>
-        </div>
-      </header>
-
-      {/* ---------- TIROIR / JOURNAL DE BORD ---------- */}
-      {menuOuvert && <div className="kk-scrim" onClick={() => setMenuOuvert(false)} />}
-      <nav className={`kk-drawer ${menuOuvert ? "ouvert" : ""}`}>
-        <div className="kk-drawer-head">
-          <span>Journal de bord</span>
-          <button onClick={() => setMenuOuvert(false)} aria-label="Fermer"><X size={20} /></button>
-        </div>
-        {[
-          ["pont", "Le pont", Gauge],
-          ["equipage", "L'équipage", Users],
-          ["recrue", "Enrôler un matelot", Plus],
-          ["comptes", "Mousses & accès", ShieldAlert],
-          ["reglages", "Cabine du capitaine", Settings],
-        ].map(([id, label, Icon]) => (
-          <button key={id} className={`kk-navitem ${vue === id ? "actif" : ""}`} onClick={() => naviguer(id)}>
-            <Icon size={18} /> <span>{label}</span> <ChevronRight size={16} className="kk-chev" />
-          </button>
-        ))}
-        <div className="kk-drawer-foot">
-          <Anchor size={13} /> flotte de {fmt(stats.total)} — conçue pour 10 000
-        </div>
-      </nav>
-
-      {/* ---------- CONTENU ---------- */}
-      <main className="kk-main">
-        {vue === "pont" && <Pont stats={stats} flotte={flotteFiltree} onOuvrir={setSelection} />}
-        {vue === "equipage" && (
-          <Equipage
-            flotte={flotteFiltree} recherche={recherche} setRecherche={setRecherche}
-            onOuvrir={setSelection}
-            onToggle={(id) => setFlotte((f) => f.map((b) => b.id === id
-              ? { ...b, etat: b.etat === "en mer" ? "à quai" : "en mer" } : b))}
-          />
-        )}
-        {vue === "recrue" && <Recrue />}
-        {vue === "comptes" && <Comptes />}
-        {vue === "reglages" && <Reglages stats={stats} />}
-      </main>
-
-      {/* ---------- FICHE MATELOT ---------- */}
-      {selection && (
-        <FicheMatelot
-          bot={flotte.find((b) => b.id === selection.id) || selection}
-          onFermer={() => setSelection(null)}
-          onToggle={(id) => setFlotte((f) => f.map((b) => b.id === id
-            ? { ...b, etat: b.etat === "en mer" ? "à quai" : "en mer" } : b))}
-        />
-      )}
-    </div>
-  );
+    const [flotte, setFlotte] = useState([]);
+    const [menuOuvert, setMenuOuvert] = useState(false);
+    const [vue, setVue] = useState("pont"); // pont | equipage | comptes | recrue | reglages
+    const [selection, setSelection] = useState(null);
+    const [recherche, setRecherche] = useState("");
+    useEffect(() => { api.getFlotte().then(setFlotte); }, []);
+    // Battement live simulé (remplacé par un canal realtime Supabase)
+    useEffect(() => {
+        const t = setInterval(() => {
+            setFlotte((f) => f.map((b) => b.etat === "en mer" && Math.random() < 0.5
+                ? Object.assign(Object.assign({}, b), { clics: b.clics + 1, dernierBattement: Math.floor(Math.random() * 8) }) : b));
+        }, 1600);
+        return () => clearInterval(t);
+    }, []);
+    const stats = useMemo(() => {
+        const total = flotte.length;
+        const enMer = flotte.filter((b) => b.etat === "en mer").length;
+        const bugs = flotte.filter((b) => b.etat === "buggé").length;
+        const clics = flotte.reduce((s, b) => s + b.clics, 0);
+        const ip = flotte.reduce((s, b) => s + b.ipChanges, 0);
+        const anomalies = flotte.reduce((s, b) => s + b.anomalies, 0);
+        return { total, enMer, bugs, clics, ip, anomalies };
+    }, [flotte]);
+    const flotteFiltree = useMemo(() => {
+        if (!recherche.trim())
+            return flotte;
+        const q = recherche.toLowerCase();
+        return flotte.filter((b) => b.nom.toLowerCase().includes(q) || b.proprio.toLowerCase().includes(q));
+    }, [flotte, recherche]);
+    const naviguer = (v) => { setVue(v); setMenuOuvert(false); setSelection(null); };
+    return (React.createElement("div", { className: "kk-root" },
+        React.createElement("style", null, CSS),
+        React.createElement("header", { className: "kk-bar" },
+            React.createElement("button", { className: "kk-burger", onClick: () => setMenuOuvert(true), "aria-label": "Ouvrir le journal de bord" },
+                React.createElement(Menu, { size: 22 })),
+            React.createElement("div", { className: "kk-brand" },
+                React.createElement(Anchor, { size: 20, className: "kk-anchor" }),
+                React.createElement("div", { className: "kk-brand-txt" },
+                    React.createElement("span", { className: "kk-name" }, "KAPTAIN KROCHET"),
+                    React.createElement("span", { className: "kk-sub" }, "poste de pilotage"))),
+            React.createElement("div", { className: `kk-radio ${stats.bugs ? "alerte" : ""}` },
+                React.createElement(Radio, { size: 14 }),
+                React.createElement("span", null, stats.bugs ? `un homme à la mer ! (${stats.bugs})` : "flotte stable"))),
+        menuOuvert && React.createElement("div", { className: "kk-scrim", onClick: () => setMenuOuvert(false) }),
+        React.createElement("nav", { className: `kk-drawer ${menuOuvert ? "ouvert" : ""}` },
+            React.createElement("div", { className: "kk-drawer-head" },
+                React.createElement("span", null, "Journal de bord"),
+                React.createElement("button", { onClick: () => setMenuOuvert(false), "aria-label": "Fermer" },
+                    React.createElement(X, { size: 20 }))),
+            [
+                ["pont", "Le pont", Gauge],
+                ["equipage", "L'équipage", Users],
+                ["recrue", "Enrôler un matelot", Plus],
+                ["comptes", "Mousses & accès", ShieldAlert],
+                ["reglages", "Cabine du capitaine", Settings],
+            ].map(([id, label, Icon]) => (React.createElement("button", { key: id, className: `kk-navitem ${vue === id ? "actif" : ""}`, onClick: () => naviguer(id) },
+                React.createElement(Icon, { size: 18 }),
+                " ",
+                React.createElement("span", null, label),
+                " ",
+                React.createElement(ChevronRight, { size: 16, className: "kk-chev" })))),
+            React.createElement("div", { className: "kk-drawer-foot" },
+                React.createElement(Anchor, { size: 13 }),
+                " flotte de ",
+                fmt(stats.total),
+                " \u2014 con\u00E7ue pour 10 000")),
+        React.createElement("main", { className: "kk-main" },
+            vue === "pont" && React.createElement(Pont, { stats: stats, flotte: flotteFiltree, onOuvrir: setSelection }),
+            vue === "equipage" && (React.createElement(Equipage, { flotte: flotteFiltree, recherche: recherche, setRecherche: setRecherche, onOuvrir: setSelection, onToggle: (id) => setFlotte((f) => f.map((b) => b.id === id
+                    ? Object.assign(Object.assign({}, b), { etat: b.etat === "en mer" ? "à quai" : "en mer" }) : b)) })),
+            vue === "recrue" && React.createElement(Recrue, null),
+            vue === "comptes" && React.createElement(Comptes, null),
+            vue === "reglages" && React.createElement(Reglages, { stats: stats })),
+        selection && (React.createElement(FicheMatelot, { bot: flotte.find((b) => b.id === selection.id) || selection, onFermer: () => setSelection(null), onToggle: (id) => setFlotte((f) => f.map((b) => b.id === id
+                ? Object.assign(Object.assign({}, b), { etat: b.etat === "en mer" ? "à quai" : "en mer" }) : b)) }))));
 }
-
 /* ====================== LE PONT (tableau de bord) ====================== */
 function Pont({ stats, flotte, onOuvrir }) {
-  return (
-    <div className="kk-view">
-      <Titre eyebrow="Vue d'ensemble" titre="Le pont" />
-
-      {/* Cadran principal : la barre du navire */}
-      <div className="kk-helm">
-        <div className="kk-helm-ring">
-          <div className="kk-helm-val">{fmt(stats.clics)}</div>
-          <div className="kk-helm-lab">clics, toute la flotte</div>
-        </div>
-        <div className="kk-helm-side">
-          <HelmStat val={`${stats.enMer}/${stats.total}`} lab="matelots en mer" tone="vert" />
-          <HelmStat val={fmt(stats.ip)} lab="changements d'IP aujourd'hui" tone="cyan" />
-        </div>
-      </div>
-
-      {/* Jauges secondaires */}
-      <div className="kk-gauges">
-        <Jauge icon={Users} val={fmt(stats.total)} lab="matelots à bord" />
-        <Jauge icon={Bug} val={stats.bugs} lab="à la dérive (buggés)" tone={stats.bugs ? "rouge" : ""} />
-        <Jauge icon={AlertTriangle} val={stats.anomalies} lab="actions anormales"
-               tone={stats.anomalies ? "ambre" : ""} />
-        <Jauge icon={Repeat} val={fmt(stats.ip)} lab="rotations d'IP" />
-      </div>
-
-      {/* Manifeste : clics par matelot */}
-      <div className="kk-panel">
-        <div className="kk-panel-head">
-          <MousePointerClick size={16} /> <span>Manifeste — clics par matelot</span>
-        </div>
-        <div className="kk-manifeste">
-          {flotte.slice(0, 12).map((b) => {
-            const max = Math.max(...flotte.map((x) => x.clics), 1);
-            return (
-              <button key={b.id} className="kk-manif-row" onClick={() => onOuvrir(b)}>
-                <span className="kk-manif-id" style={{ color: b.couleur }}>#{b.id}</span>
-                <span className="kk-manif-nom">{b.nom}</span>
-                <div className="kk-manif-bar">
-                  <div className="kk-manif-fill"
-                       style={{ width: `${(b.clics / max) * 100}%`, background: b.couleur }} />
-                </div>
-                <span className="kk-manif-val">{fmt(b.clics)}</span>
-                <span className="kk-dot" style={{ background: etatColor(b.etat) }} />
-              </button>
-            );
-          })}
-        </div>
-        <div className="kk-panel-foot">
-          12 premiers — ouvre « L'équipage » pour la flotte entière
-          {flotte.some((b) => b.etat === "à quai") &&
-            <span className="kk-pique"> · les matelots à quai ? des marins d'eau douce 🦜</span>}
-        </div>
-      </div>
-    </div>
-  );
+    return (React.createElement("div", { className: "kk-view" },
+        React.createElement(Titre, { eyebrow: "Vue d'ensemble", titre: "Le pont" }),
+        React.createElement("div", { className: "kk-helm" },
+            React.createElement("div", { className: "kk-helm-ring" },
+                React.createElement("div", { className: "kk-helm-val" }, fmt(stats.clics)),
+                React.createElement("div", { className: "kk-helm-lab" }, "clics, toute la flotte")),
+            React.createElement("div", { className: "kk-helm-side" },
+                React.createElement(HelmStat, { val: `${stats.enMer}/${stats.total}`, lab: "matelots en mer", tone: "vert" }),
+                React.createElement(HelmStat, { val: fmt(stats.ip), lab: "changements d'IP aujourd'hui", tone: "cyan" }))),
+        React.createElement("div", { className: "kk-gauges" },
+            React.createElement(Jauge, { icon: Users, val: fmt(stats.total), lab: "matelots \u00E0 bord" }),
+            React.createElement(Jauge, { icon: Bug, val: stats.bugs, lab: "\u00E0 la d\u00E9rive (bugg\u00E9s)", tone: stats.bugs ? "rouge" : "" }),
+            React.createElement(Jauge, { icon: AlertTriangle, val: stats.anomalies, lab: "actions anormales", tone: stats.anomalies ? "ambre" : "" }),
+            React.createElement(Jauge, { icon: Repeat, val: fmt(stats.ip), lab: "rotations d'IP" })),
+        React.createElement("div", { className: "kk-panel" },
+            React.createElement("div", { className: "kk-panel-head" },
+                React.createElement(MousePointerClick, { size: 16 }),
+                " ",
+                React.createElement("span", null, "Manifeste \u2014 clics par matelot")),
+            React.createElement("div", { className: "kk-manifeste" }, flotte.slice(0, 12).map((b) => {
+                const max = Math.max(...flotte.map((x) => x.clics), 1);
+                return (React.createElement("button", { key: b.id, className: "kk-manif-row", onClick: () => onOuvrir(b) },
+                    React.createElement("span", { className: "kk-manif-id", style: { color: b.couleur } },
+                        "#",
+                        b.id),
+                    React.createElement("span", { className: "kk-manif-nom" }, b.nom),
+                    React.createElement("div", { className: "kk-manif-bar" },
+                        React.createElement("div", { className: "kk-manif-fill", style: { width: `${(b.clics / max) * 100}%`, background: b.couleur } })),
+                    React.createElement("span", { className: "kk-manif-val" }, fmt(b.clics)),
+                    React.createElement("span", { className: "kk-dot", style: { background: etatColor(b.etat) } })));
+            })),
+            React.createElement("div", { className: "kk-panel-foot" },
+                "12 premiers \u2014 ouvre \u00AB L'\u00E9quipage \u00BB pour la flotte enti\u00E8re",
+                flotte.some((b) => b.etat === "à quai") &&
+                    React.createElement("span", { className: "kk-pique" }, " \u00B7 les matelots \u00E0 quai ? des marins d'eau douce \uD83E\uDD9C")))));
 }
-
 function HelmStat({ val, lab, tone }) {
-  return (
-    <div className={`kk-helmstat ${tone}`}>
-      <div className="kk-helmstat-val">{val}</div>
-      <div className="kk-helmstat-lab">{lab}</div>
-    </div>
-  );
+    return (React.createElement("div", { className: `kk-helmstat ${tone}` },
+        React.createElement("div", { className: "kk-helmstat-val" }, val),
+        React.createElement("div", { className: "kk-helmstat-lab" }, lab)));
 }
 function Jauge({ icon: Icon, val, lab, tone = "" }) {
-  return (
-    <div className={`kk-jauge ${tone}`}>
-      <Icon size={18} className="kk-jauge-icon" />
-      <div className="kk-jauge-val">{val}</div>
-      <div className="kk-jauge-lab">{lab}</div>
-    </div>
-  );
+    return (React.createElement("div", { className: `kk-jauge ${tone}` },
+        React.createElement(Icon, { size: 18, className: "kk-jauge-icon" }),
+        React.createElement("div", { className: "kk-jauge-val" }, val),
+        React.createElement("div", { className: "kk-jauge-lab" }, lab)));
 }
-
 /* ====================== L'ÉQUIPAGE (liste + captures) ====================== */
 function Equipage({ flotte, recherche, setRecherche, onOuvrir, onToggle }) {
-  return (
-    <div className="kk-view">
-      <Titre eyebrow="État de la flotte" titre="L'équipage" />
-      <div className="kk-search">
-        <Search size={16} />
-        <input value={recherche} onChange={(e) => setRecherche(e.target.value)}
-               placeholder="Chercher un matelot ou un mousse…" />
-      </div>
-      <div className="kk-grid">
-        {flotte.map((b) => (
-          <div key={b.id} className="kk-card">
-            <button className="kk-card-screen" onClick={() => onOuvrir(b)}>
-              <FauxEcran bot={b} />
-              <span className="kk-card-eye"><Eye size={14} /> voir le direct</span>
-            </button>
-            <div className="kk-card-body">
-              <div className="kk-card-top">
-                <span className="kk-card-nom">{b.nom}</span>
-                <span className="kk-statut" style={{ color: etatColor(b.etat) }}>
-                  <span className="kk-dot" style={{ background: etatColor(b.etat) }} />{b.etat}
-                </span>
-              </div>
-              <div className="kk-card-meta">
-                <span style={{ color: b.couleur }}>{b.scenarioNom}</span> · {b.proprio}
-              </div>
-              <div className="kk-card-stats">
-                <span><MousePointerClick size={12} /> {fmt(b.clics)}</span>
-                <span><Repeat size={12} /> {b.ipChanges} IP</span>
-                {b.anomalies > 0 && <span className="kk-warn"><AlertTriangle size={12} /> {b.anomalies}</span>}
-              </div>
-              <button className="kk-toggle" onClick={() => onToggle(b.id)}>
-                {b.etat === "en mer" ? <><Pause size={13} /> Mettre à quai</> : <><Play size={13} /> Larguer</>}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+    return (React.createElement("div", { className: "kk-view" },
+        React.createElement(Titre, { eyebrow: "\u00C9tat de la flotte", titre: "L'\u00E9quipage" }),
+        React.createElement("div", { className: "kk-search" },
+            React.createElement(Search, { size: 16 }),
+            React.createElement("input", { value: recherche, onChange: (e) => setRecherche(e.target.value), placeholder: "Chercher un matelot ou un mousse\u2026" })),
+        React.createElement("div", { className: "kk-grid" }, flotte.map((b) => (React.createElement("div", { key: b.id, className: "kk-card" },
+            React.createElement("button", { className: "kk-card-screen", onClick: () => onOuvrir(b) },
+                React.createElement(FauxEcran, { bot: b }),
+                React.createElement("span", { className: "kk-card-eye" },
+                    React.createElement(Eye, { size: 14 }),
+                    " voir le direct")),
+            React.createElement("div", { className: "kk-card-body" },
+                React.createElement("div", { className: "kk-card-top" },
+                    React.createElement("span", { className: "kk-card-nom" }, b.nom),
+                    React.createElement("span", { className: "kk-statut", style: { color: etatColor(b.etat) } },
+                        React.createElement("span", { className: "kk-dot", style: { background: etatColor(b.etat) } }),
+                        b.etat)),
+                React.createElement("div", { className: "kk-card-meta" },
+                    React.createElement("span", { style: { color: b.couleur } }, b.scenarioNom),
+                    " \u00B7 ",
+                    b.proprio),
+                React.createElement("div", { className: "kk-card-stats" },
+                    React.createElement("span", null,
+                        React.createElement(MousePointerClick, { size: 12 }),
+                        " ",
+                        fmt(b.clics)),
+                    React.createElement("span", null,
+                        React.createElement(Repeat, { size: 12 }),
+                        " ",
+                        b.ipChanges,
+                        " IP"),
+                    b.anomalies > 0 && React.createElement("span", { className: "kk-warn" },
+                        React.createElement(AlertTriangle, { size: 12 }),
+                        " ",
+                        b.anomalies)),
+                React.createElement("button", { className: "kk-toggle", onClick: () => onToggle(b.id) }, b.etat === "en mer" ? React.createElement(React.Fragment, null,
+                    React.createElement(Pause, { size: 13 }),
+                    " Mettre \u00E0 quai") : React.createElement(React.Fragment, null,
+                    React.createElement(Play, { size: 13 }),
+                    " Larguer")))))))));
 }
-
 /* Faux écran de bot — vraie capture / vidéo viendra du worker (CDP screencast) */
 function FauxEcran({ bot }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const c = ref.current; if (!c) return;
-    const ctx = c.getContext("2d");
-    let raf, t = 0;
-    const draw = () => {
-      t += 0.02;
-      ctx.fillStyle = "#0a141c"; ctx.fillRect(0, 0, c.width, c.height);
-      // pseudo "fenêtre de jeu HTML"
-      ctx.fillStyle = "#13212e"; ctx.fillRect(8, 8, c.width - 16, 18);
-      ctx.fillStyle = bot.couleur;
-      for (let i = 0; i < 3; i++) ctx.fillRect(14 + i * 8, 13, 5, 5);
-      ctx.fillStyle = "#1a2c3a";
-      ctx.fillRect(8, 32, c.width - 16, c.height - 40);
-      // curseur qui "clique"
-      if (bot.etat === "en mer") {
-        const x = c.width / 2 + Math.cos(t) * 22;
-        const y = c.height / 2 + Math.sin(t * 1.3) * 14;
-        ctx.fillStyle = (Math.sin(t * 6) > 0.7) ? bot.couleur : "#e9eef2";
-        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
-      } else {
-        ctx.fillStyle = "#33485a"; ctx.font = "10px monospace";
-        ctx.fillText(bot.etat === "buggé" ? "⚠ à la dérive" : "à quai", 14, c.height / 2);
-      }
-      raf = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => cancelAnimationFrame(raf);
-  }, [bot.couleur, bot.etat]);
-  return <canvas ref={ref} width={220} height={120} className="kk-canvas" />;
+    const ref = useRef(null);
+    useEffect(() => {
+        const c = ref.current;
+        if (!c)
+            return;
+        const ctx = c.getContext("2d");
+        let raf, t = 0;
+        const draw = () => {
+            t += 0.02;
+            ctx.fillStyle = "#0a141c";
+            ctx.fillRect(0, 0, c.width, c.height);
+            // pseudo "fenêtre de jeu HTML"
+            ctx.fillStyle = "#13212e";
+            ctx.fillRect(8, 8, c.width - 16, 18);
+            ctx.fillStyle = bot.couleur;
+            for (let i = 0; i < 3; i++)
+                ctx.fillRect(14 + i * 8, 13, 5, 5);
+            ctx.fillStyle = "#1a2c3a";
+            ctx.fillRect(8, 32, c.width - 16, c.height - 40);
+            // curseur qui "clique"
+            if (bot.etat === "en mer") {
+                const x = c.width / 2 + Math.cos(t) * 22;
+                const y = c.height / 2 + Math.sin(t * 1.3) * 14;
+                ctx.fillStyle = (Math.sin(t * 6) > 0.7) ? bot.couleur : "#e9eef2";
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            else {
+                ctx.fillStyle = "#33485a";
+                ctx.font = "10px monospace";
+                ctx.fillText(bot.etat === "buggé" ? "⚠ à la dérive" : "à quai", 14, c.height / 2);
+            }
+            raf = requestAnimationFrame(draw);
+        };
+        draw();
+        return () => cancelAnimationFrame(raf);
+    }, [bot.couleur, bot.etat]);
+    return React.createElement("canvas", { ref: ref, width: 220, height: 120, className: "kk-canvas" });
 }
-
 /* ====================== FICHE MATELOT (direct + réglages) ====================== */
 function FicheMatelot({ bot, onFermer, onToggle }) {
-  return (
-    <>
-      <div className="kk-scrim" onClick={onFermer} />
-      <aside className="kk-fiche">
-        <div className="kk-fiche-head">
-          <div>
-            <div className="kk-fiche-nom">{bot.nom}</div>
-            <div className="kk-fiche-sub" style={{ color: bot.couleur }}>{bot.scenarioNom}</div>
-          </div>
-          <button onClick={onFermer} aria-label="Fermer"><X size={20} /></button>
-        </div>
-
-        <div className="kk-live">
-          <div className="kk-live-tag"><Camera size={12} /> DIRECT</div>
-          <FauxEcran bot={bot} />
-        </div>
-
-        {bot.etat === "buggé" && (
-          <div className="kk-overboard">
-            <AlertTriangle size={15} /> Un homme à la mer ! Ce matelot a décroché — relance-le ou repêche-le.
-          </div>
-        )}
-
-        <div className="kk-fiche-stats">
-          <FicheStat lab="Clics totaux" val={fmt(bot.clics)} />
-          <FicheStat lab="Rotations d'IP" val={bot.ipChanges} />
-          <FicheStat lab="Propriétaire" val={bot.proprio} />
-          <FicheStat lab="Dernier battement" val={`${bot.dernierBattement}s`}
-                     alerte={bot.dernierBattement > 60} />
-          <FicheStat lab="Actions anormales" val={bot.anomalies} alerte={bot.anomalies > 0} />
-          <FicheStat lab="État" val={bot.etat} />
-        </div>
-
-        <div className="kk-fiche-actions">
-          <button className="kk-btn-primaire" onClick={() => onToggle(bot.id)}>
-            {bot.etat === "en mer" ? <><Pause size={15} /> Mettre à quai</> : <><Play size={15} /> Larguer</>}
-          </button>
-          <button className="kk-btn-ghost"><Settings size={15} /> Réglages & débogage</button>
-          <button className="kk-btn-danger"><Power size={15} /> Renvoyer ce matelot</button>
-        </div>
-
-        <div className="kk-fiche-note">
-          Le direct et les réglages tirent leur état du dernier battement du matelot.
-          Aucun ordre n'est exécuté ici sans validation côté serveur.
-        </div>
-      </aside>
-    </>
-  );
+    return (React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "kk-scrim", onClick: onFermer }),
+        React.createElement("aside", { className: "kk-fiche" },
+            React.createElement("div", { className: "kk-fiche-head" },
+                React.createElement("div", null,
+                    React.createElement("div", { className: "kk-fiche-nom" }, bot.nom),
+                    React.createElement("div", { className: "kk-fiche-sub", style: { color: bot.couleur } }, bot.scenarioNom)),
+                React.createElement("button", { onClick: onFermer, "aria-label": "Fermer" },
+                    React.createElement(X, { size: 20 }))),
+            React.createElement("div", { className: "kk-live" },
+                React.createElement("div", { className: "kk-live-tag" },
+                    React.createElement(Camera, { size: 12 }),
+                    " DIRECT"),
+                React.createElement(FauxEcran, { bot: bot })),
+            bot.etat === "buggé" && (React.createElement("div", { className: "kk-overboard" },
+                React.createElement(AlertTriangle, { size: 15 }),
+                " Un homme \u00E0 la mer ! Ce matelot a d\u00E9croch\u00E9 \u2014 relance-le ou rep\u00EAche-le.")),
+            React.createElement("div", { className: "kk-fiche-stats" },
+                React.createElement(FicheStat, { lab: "Clics totaux", val: fmt(bot.clics) }),
+                React.createElement(FicheStat, { lab: "Rotations d'IP", val: bot.ipChanges }),
+                React.createElement(FicheStat, { lab: "Propri\u00E9taire", val: bot.proprio }),
+                React.createElement(FicheStat, { lab: "Dernier battement", val: `${bot.dernierBattement}s`, alerte: bot.dernierBattement > 60 }),
+                React.createElement(FicheStat, { lab: "Actions anormales", val: bot.anomalies, alerte: bot.anomalies > 0 }),
+                React.createElement(FicheStat, { lab: "\u00C9tat", val: bot.etat })),
+            React.createElement("div", { className: "kk-fiche-actions" },
+                React.createElement("button", { className: "kk-btn-primaire", onClick: () => onToggle(bot.id) }, bot.etat === "en mer" ? React.createElement(React.Fragment, null,
+                    React.createElement(Pause, { size: 15 }),
+                    " Mettre \u00E0 quai") : React.createElement(React.Fragment, null,
+                    React.createElement(Play, { size: 15 }),
+                    " Larguer")),
+                React.createElement("button", { className: "kk-btn-ghost" },
+                    React.createElement(Settings, { size: 15 }),
+                    " R\u00E9glages & d\u00E9bogage"),
+                React.createElement("button", { className: "kk-btn-danger" },
+                    React.createElement(Power, { size: 15 }),
+                    " Renvoyer ce matelot")),
+            React.createElement("div", { className: "kk-fiche-note" }, "Le direct et les r\u00E9glages tirent leur \u00E9tat du dernier battement du matelot. Aucun ordre n'est ex\u00E9cut\u00E9 ici sans validation c\u00F4t\u00E9 serveur."))));
 }
 function FicheStat({ lab, val, alerte }) {
-  return (
-    <div className={`kk-fichestat ${alerte ? "alerte" : ""}`}>
-      <div className="kk-fichestat-lab">{lab}</div>
-      <div className="kk-fichestat-val">{val}</div>
-    </div>
-  );
+    return (React.createElement("div", { className: `kk-fichestat ${alerte ? "alerte" : ""}` },
+        React.createElement("div", { className: "kk-fichestat-lab" }, lab),
+        React.createElement("div", { className: "kk-fichestat-val" }, val)));
 }
-
 /* ====================== ENRÔLER (ajouter des bots) ====================== */
 function Recrue() {
-  const [nb, setNb] = useState(1);
-  const [sc, setSc] = useState(SCENARIOS[0].id);
-  const [proprio, setProprio] = useState(PROPRIOS[1]);
-  return (
-    <div className="kk-view">
-      <Titre eyebrow="Renforts" titre="Enrôler un matelot" />
-      <div className="kk-form">
-        <label className="kk-field">
-          <span>Combien de matelots ?</span>
-          <div className="kk-stepper">
-            <button onClick={() => setNb((n) => Math.max(1, n - 1))}>−</button>
-            <input type="number" value={nb} min={1}
-                   onChange={(e) => setNb(Math.max(1, +e.target.value || 1))} />
-            <button onClick={() => setNb((n) => n + 1)}>+</button>
-          </div>
-          <small>Un matelot identique se duplique en une ligne. 1 ou 10 000, même geste.</small>
-        </label>
-
-        <label className="kk-field">
-          <span>Mission (scénario validé)</span>
-          <div className="kk-choices">
-            {SCENARIOS.map((s) => (
-              <button key={s.id} className={`kk-choice ${sc === s.id ? "actif" : ""}`}
-                      onClick={() => setSc(s.id)} style={{ "--c": s.couleur }}>
-                {s.nom}
-              </button>
-            ))}
-          </div>
-          <small>Les missions sont un menu fermé. Toi seul en ajoutes — personne n'improvise.</small>
-        </label>
-
-        <label className="kk-field">
-          <span>Pour quel mousse ?</span>
-          <select value={proprio} onChange={(e) => setProprio(e.target.value)} className="kk-select">
-            {PROPRIOS.map((p) => <option key={p}>{p}</option>)}
-          </select>
-        </label>
-
-        <button className="kk-btn-primaire kk-btn-lg">
-          <Plus size={16} /> Enrôler {nb} matelot{nb > 1 ? "s" : ""} — en avant, moussaillons !
-        </button>
-        <div className="kk-recap">
-          Tu t'apprêtes à larguer <strong>{nb}</strong> matelot{nb > 1 ? "s" : ""} sur
-          {" "}<strong style={{ color: SCENARIOS.find((s) => s.id === sc).couleur }}>
-          {SCENARIOS.find((s) => s.id === sc).nom}</strong> pour <strong>{proprio}</strong>.
-        </div>
-      </div>
-    </div>
-  );
+    const [nb, setNb] = useState(1);
+    const [sc, setSc] = useState(SCENARIOS[0].id);
+    const [proprio, setProprio] = useState(PROPRIOS[1]);
+    return (React.createElement("div", { className: "kk-view" },
+        React.createElement(Titre, { eyebrow: "Renforts", titre: "Enr\u00F4ler un matelot" }),
+        React.createElement("div", { className: "kk-form" },
+            React.createElement("label", { className: "kk-field" },
+                React.createElement("span", null, "Combien de matelots ?"),
+                React.createElement("div", { className: "kk-stepper" },
+                    React.createElement("button", { onClick: () => setNb((n) => Math.max(1, n - 1)) }, "\u2212"),
+                    React.createElement("input", { type: "number", value: nb, min: 1, onChange: (e) => setNb(Math.max(1, +e.target.value || 1)) }),
+                    React.createElement("button", { onClick: () => setNb((n) => n + 1) }, "+")),
+                React.createElement("small", null, "Un matelot identique se duplique en une ligne. 1 ou 10 000, m\u00EAme geste.")),
+            React.createElement("label", { className: "kk-field" },
+                React.createElement("span", null, "Mission (sc\u00E9nario valid\u00E9)"),
+                React.createElement("div", { className: "kk-choices" }, SCENARIOS.map((s) => (React.createElement("button", { key: s.id, className: `kk-choice ${sc === s.id ? "actif" : ""}`, onClick: () => setSc(s.id), style: { "--c": s.couleur } }, s.nom)))),
+                React.createElement("small", null, "Les missions sont un menu ferm\u00E9. Toi seul en ajoutes \u2014 personne n'improvise.")),
+            React.createElement("label", { className: "kk-field" },
+                React.createElement("span", null, "Pour quel mousse ?"),
+                React.createElement("select", { value: proprio, onChange: (e) => setProprio(e.target.value), className: "kk-select" }, PROPRIOS.map((p) => React.createElement("option", { key: p }, p)))),
+            React.createElement("button", { className: "kk-btn-primaire kk-btn-lg" },
+                React.createElement(Plus, { size: 16 }),
+                " Enr\u00F4ler ",
+                nb,
+                " matelot",
+                nb > 1 ? "s" : "",
+                " \u2014 en avant, moussaillons !"),
+            React.createElement("div", { className: "kk-recap" },
+                "Tu t'appr\u00EAtes \u00E0 larguer ",
+                React.createElement("strong", null, nb),
+                " matelot",
+                nb > 1 ? "s" : "",
+                " sur",
+                " ",
+                React.createElement("strong", { style: { color: SCENARIOS.find((s) => s.id === sc).couleur } }, SCENARIOS.find((s) => s.id === sc).nom),
+                " pour ",
+                React.createElement("strong", null, proprio),
+                "."))));
 }
-
 /* ====================== MOUSSES & ACCÈS (admin) ====================== */
 function Comptes() {
-  const mousses = [
-    { nom: "Mehdi", bots: 9, actif: true, anomalies: 0 },
-    { nom: "Sofiane", bots: 12, actif: true, anomalies: 2 },
-    { nom: "Yanis", bots: 7, actif: true, anomalies: 0 },
-    { nom: "Rayan", bots: 6, actif: false, anomalies: 5 },
-  ];
-  return (
-    <div className="kk-view">
-      <Titre eyebrow="Capitainerie" titre="Mousses & accès" />
-      <p className="kk-lede">
-        Chaque mousse ne voit que ses matelots et ne choisit que parmi les missions validées.
-        Couper un accès est immédiat — d'un seul geste, côté serveur.
-      </p>
-      <div className="kk-mousses">
-        {mousses.map((m) => (
-          <div key={m.nom} className={`kk-mousse ${m.actif ? "" : "coupe"}`}>
-            <div className="kk-mousse-av">{m.nom[0]}</div>
-            <div className="kk-mousse-info">
-              <div className="kk-mousse-nom">{m.nom}</div>
-              <div className="kk-mousse-meta">
-                {m.bots} matelots
-                {m.anomalies > 0 && <span className="kk-warn"> · {m.anomalies} alertes</span>}
-              </div>
-            </div>
-            <button className={`kk-acces ${m.actif ? "on" : "off"}`}>
-              <Power size={14} /> {m.actif ? "Accès ouvert" : "Coupé"}
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="kk-panel kk-admin-note">
-        <ShieldAlert size={16} />
-        <div>
-          <strong>Garde du capitaine.</strong> Ton vrai contrôle tient à trois choses :
-          toi seul crées les comptes, les missions sont un menu fermé, et l'accès se coupe
-          en un clic côté serveur. Pas besoin de retenir leurs identifiants pour rester maître à bord.
-        </div>
-      </div>
-    </div>
-  );
+    const mousses = [
+        { nom: "Mehdi", bots: 9, actif: true, anomalies: 0 },
+        { nom: "Sofiane", bots: 12, actif: true, anomalies: 2 },
+        { nom: "Yanis", bots: 7, actif: true, anomalies: 0 },
+        { nom: "Rayan", bots: 6, actif: false, anomalies: 5 },
+    ];
+    return (React.createElement("div", { className: "kk-view" },
+        React.createElement(Titre, { eyebrow: "Capitainerie", titre: "Mousses & acc\u00E8s" }),
+        React.createElement("p", { className: "kk-lede" }, "Chaque mousse ne voit que ses matelots et ne choisit que parmi les missions valid\u00E9es. Couper un acc\u00E8s est imm\u00E9diat \u2014 d'un seul geste, c\u00F4t\u00E9 serveur."),
+        React.createElement("div", { className: "kk-mousses" }, mousses.map((m) => (React.createElement("div", { key: m.nom, className: `kk-mousse ${m.actif ? "" : "coupe"}` },
+            React.createElement("div", { className: "kk-mousse-av" }, m.nom[0]),
+            React.createElement("div", { className: "kk-mousse-info" },
+                React.createElement("div", { className: "kk-mousse-nom" }, m.nom),
+                React.createElement("div", { className: "kk-mousse-meta" },
+                    m.bots,
+                    " matelots",
+                    m.anomalies > 0 && React.createElement("span", { className: "kk-warn" },
+                        " \u00B7 ",
+                        m.anomalies,
+                        " alertes"))),
+            React.createElement("button", { className: `kk-acces ${m.actif ? "on" : "off"}` },
+                React.createElement(Power, { size: 14 }),
+                " ",
+                m.actif ? "Accès ouvert" : "Coupé"))))),
+        React.createElement("div", { className: "kk-panel kk-admin-note" },
+            React.createElement(ShieldAlert, { size: 16 }),
+            React.createElement("div", null,
+                React.createElement("strong", null, "Garde du capitaine."),
+                " Ton vrai contr\u00F4le tient \u00E0 trois choses : toi seul cr\u00E9es les comptes, les missions sont un menu ferm\u00E9, et l'acc\u00E8s se coupe en un clic c\u00F4t\u00E9 serveur. Pas besoin de retenir leurs identifiants pour rester ma\u00EEtre \u00E0 bord."))));
 }
-
 /* ====================== CABINE (réglages) ====================== */
 function Reglages({ stats }) {
-  return (
-    <div className="kk-view">
-      <Titre eyebrow="Réglages" titre="Cabine du capitaine" />
-      <div className="kk-panel">
-        <div className="kk-panel-head"><Activity size={16} /> <span>Santé de la flotte</span></div>
-        <div className="kk-health">
-          <div><span>{fmt(stats.clics)}</span><small>clics cumulés</small></div>
-          <div><span>{stats.enMer}/{stats.total}</span><small>en mer</small></div>
-          <div className={stats.bugs ? "bad" : ""}><span>{stats.bugs}</span><small>à la dérive</small></div>
-          <div className={stats.anomalies ? "warn" : ""}><span>{stats.anomalies}</span><small>anomalies</small></div>
-        </div>
-      </div>
-      <div className="kk-panel">
-        <div className="kk-panel-head"><ShieldAlert size={16} /> <span>Signatures de pub</span></div>
-        <p className="kk-lede" style={{ margin: "0 0 12px" }}>
-          Quand un matelot croise une pub, il la ferme grâce à ces signatures.
-          Ajoute un motif ici, il s'applique à toute la flotte d'un coup.
-        </p>
-        <div className="kk-sigs">
-          {["bouton .close-ad", "texte « Passer »", "overlay plein écran", "iframe googleads"].map((s) => (
-            <span key={s} className="kk-sig">{s} <X size={12} /></span>
-          ))}
-          <button className="kk-sig kk-sig-add"><Plus size={12} /> ajouter</button>
-        </div>
-      </div>
-    </div>
-  );
+    return (React.createElement("div", { className: "kk-view" },
+        React.createElement(Titre, { eyebrow: "R\u00E9glages", titre: "Cabine du capitaine" }),
+        React.createElement("div", { className: "kk-panel" },
+            React.createElement("div", { className: "kk-panel-head" },
+                React.createElement(Activity, { size: 16 }),
+                " ",
+                React.createElement("span", null, "Sant\u00E9 de la flotte")),
+            React.createElement("div", { className: "kk-health" },
+                React.createElement("div", null,
+                    React.createElement("span", null, fmt(stats.clics)),
+                    React.createElement("small", null, "clics cumul\u00E9s")),
+                React.createElement("div", null,
+                    React.createElement("span", null,
+                        stats.enMer,
+                        "/",
+                        stats.total),
+                    React.createElement("small", null, "en mer")),
+                React.createElement("div", { className: stats.bugs ? "bad" : "" },
+                    React.createElement("span", null, stats.bugs),
+                    React.createElement("small", null, "\u00E0 la d\u00E9rive")),
+                React.createElement("div", { className: stats.anomalies ? "warn" : "" },
+                    React.createElement("span", null, stats.anomalies),
+                    React.createElement("small", null, "anomalies")))),
+        React.createElement("div", { className: "kk-panel" },
+            React.createElement("div", { className: "kk-panel-head" },
+                React.createElement(ShieldAlert, { size: 16 }),
+                " ",
+                React.createElement("span", null, "Signatures de pub")),
+            React.createElement("p", { className: "kk-lede", style: { margin: "0 0 12px" } }, "Quand un matelot croise une pub, il la ferme gr\u00E2ce \u00E0 ces signatures. Ajoute un motif ici, il s'applique \u00E0 toute la flotte d'un coup."),
+            React.createElement("div", { className: "kk-sigs" },
+                ["bouton .close-ad", "texte « Passer »", "overlay plein écran", "iframe googleads"].map((s) => (React.createElement("span", { key: s, className: "kk-sig" },
+                    s,
+                    " ",
+                    React.createElement(X, { size: 12 })))),
+                React.createElement("button", { className: "kk-sig kk-sig-add" },
+                    React.createElement(Plus, { size: 12 }),
+                    " ajouter")))));
 }
-
 /* ====================== UI atoms ====================== */
 function Titre({ eyebrow, titre }) {
-  return (
-    <div className="kk-titre">
-      <span className="kk-eyebrow">{eyebrow}</span>
-      <h1>{titre}</h1>
-    </div>
-  );
+    return (React.createElement("div", { className: "kk-titre" },
+        React.createElement("span", { className: "kk-eyebrow" }, eyebrow),
+        React.createElement("h1", null, titre)));
 }
-
 /* ====================== STYLE ====================== */
 const CSS = `
 :root{
@@ -862,10 +815,9 @@ const CSS = `
 
 try {
   const root = ReactDOM.createRoot(document.getElementById("root"));
-  root.render(<KaptainKrochet />);
+  root.render(React.createElement(KaptainKrochet));
 } catch (e) {
-  var fb=document.getElementById('kk-fallback');
-  var err=document.getElementById('kk-err');
+  var fb=document.getElementById('kk-fallback'), err=document.getElementById('kk-err');
   if(fb&&err){ fb.style.display='block'; err.textContent='Erreur de rendu: '+e.message; }
 }
 </script>
