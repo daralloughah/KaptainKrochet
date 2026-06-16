@@ -1,0 +1,790 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import {
+  Anchor, Menu, X, Activity, MousePointerClick, Repeat, AlertTriangle,
+  Bug, Plus, Users, Settings, Gauge, Camera, Play, Pause, Search,
+  ShieldAlert, Radio, ChevronRight, Power, Eye
+} from "lucide-react";
+
+/* ============================================================
+   KAPTAIN KROCHET — Poste de pilotage
+   Architecture "worker idiot + cerveau central" :
+   - Le front ne fait que LIRE l'état (heartbeats) et ÉCRIRE des ordres.
+   - Toute donnée vient d'une couche `api` (ici mock) -> swap Supabase direct.
+   - Conçu pour afficher 10 / 1000 / 10000 matelots sans changer le code :
+     on lit une table d'état, on agrège, on virtualise la liste.
+   ============================================================ */
+
+/* ---------- COUCHE DONNÉES (mock -> remplacer par Supabase) ----------
+   Pour brancher Supabase plus tard, remplace le corps de chaque fonction
+   par un appel supabase.from('bots')... Le reste de l'app ne bouge pas. */
+const SCENARIOS = [
+  { id: "clicker_a", nom: "Récolte — Jeu A", couleur: "#e8b04b" },
+  { id: "clicker_b", nom: "Récolte — Jeu B", couleur: "#5fb0c4" },
+  { id: "daily_c",   nom: "Tour quotidien — Jeu C", couleur: "#c47a5f" },
+];
+const PROPRIOS = ["Toi", "Mehdi", "Sofiane", "Yanis", "Rayan"];
+
+function genFlotte(n) {
+  const arr = [];
+  for (let i = 1; i <= n; i++) {
+    const sc = SCENARIOS[i % SCENARIOS.length];
+    const bug = Math.random() < 0.06;
+    const anomalies = Math.random() < 0.12 ? Math.floor(Math.random() * 4) + 1 : 0;
+    arr.push({
+      id: i,
+      nom: `Matelot ${String(i).padStart(3, "0")}`,
+      proprio: PROPRIOS[i % PROPRIOS.length],
+      scenario: sc.id,
+      scenarioNom: sc.nom,
+      couleur: sc.couleur,
+      clics: Math.floor(Math.random() * 9000) + 100,
+      ipChanges: Math.floor(Math.random() * 14),
+      anomalies,
+      etat: bug ? "buggé" : Math.random() < 0.78 ? "en mer" : "à quai",
+      dernierBattement: bug ? 240 + Math.floor(Math.random() * 600) : Math.floor(Math.random() * 14),
+    });
+  }
+  return arr;
+}
+
+const api = {
+  async getFlotte() { return genFlotte(48); },          // <- supabase.from('bots').select()
+  async toggleBot(id) { return { ok: true, id }; },      // <- update etat
+};
+
+/* ---------- Helpers ---------- */
+const fmt = (n) => n.toLocaleString("fr-FR");
+const etatColor = (e) =>
+  e === "en mer" ? "var(--vert)" : e === "à quai" ? "var(--brume)" : "var(--rouge)";
+
+/* ====================================================================== */
+export default function KaptainKrochet() {
+  const [flotte, setFlotte] = useState([]);
+  const [menuOuvert, setMenuOuvert] = useState(false);
+  const [vue, setVue] = useState("pont"); // pont | equipage | comptes | recrue | reglages
+  const [selection, setSelection] = useState(null);
+  const [recherche, setRecherche] = useState("");
+
+  useEffect(() => { api.getFlotte().then(setFlotte); }, []);
+
+  // Battement live simulé (remplacé par un canal realtime Supabase)
+  useEffect(() => {
+    const t = setInterval(() => {
+      setFlotte((f) =>
+        f.map((b) =>
+          b.etat === "en mer" && Math.random() < 0.5
+            ? { ...b, clics: b.clics + 1, dernierBattement: Math.floor(Math.random() * 8) }
+            : b
+        )
+      );
+    }, 1600);
+    return () => clearInterval(t);
+  }, []);
+
+  const stats = useMemo(() => {
+    const total = flotte.length;
+    const enMer = flotte.filter((b) => b.etat === "en mer").length;
+    const bugs = flotte.filter((b) => b.etat === "buggé").length;
+    const clics = flotte.reduce((s, b) => s + b.clics, 0);
+    const ip = flotte.reduce((s, b) => s + b.ipChanges, 0);
+    const anomalies = flotte.reduce((s, b) => s + b.anomalies, 0);
+    return { total, enMer, bugs, clics, ip, anomalies };
+  }, [flotte]);
+
+  const flotteFiltree = useMemo(() => {
+    if (!recherche.trim()) return flotte;
+    const q = recherche.toLowerCase();
+    return flotte.filter(
+      (b) => b.nom.toLowerCase().includes(q) || b.proprio.toLowerCase().includes(q)
+    );
+  }, [flotte, recherche]);
+
+  const naviguer = (v) => { setVue(v); setMenuOuvert(false); setSelection(null); };
+
+  return (
+    <div className="kk-root">
+      <style>{CSS}</style>
+
+      {/* ---------- BARRE DE PONT ---------- */}
+      <header className="kk-bar">
+        <button className="kk-burger" onClick={() => setMenuOuvert(true)} aria-label="Ouvrir le journal de bord">
+          <Menu size={22} />
+        </button>
+        <div className="kk-brand">
+          <Anchor size={20} className="kk-anchor" />
+          <div className="kk-brand-txt">
+            <span className="kk-name">KAPTAIN KROCHET</span>
+            <span className="kk-sub">poste de pilotage</span>
+          </div>
+        </div>
+        <div className={`kk-radio ${stats.bugs ? "alerte" : ""}`}>
+          <Radio size={14} />
+          <span>{stats.bugs ? `un homme à la mer ! (${stats.bugs})` : "flotte stable"}</span>
+        </div>
+      </header>
+
+      {/* ---------- TIROIR / JOURNAL DE BORD ---------- */}
+      {menuOuvert && <div className="kk-scrim" onClick={() => setMenuOuvert(false)} />}
+      <nav className={`kk-drawer ${menuOuvert ? "ouvert" : ""}`}>
+        <div className="kk-drawer-head">
+          <span>Journal de bord</span>
+          <button onClick={() => setMenuOuvert(false)} aria-label="Fermer"><X size={20} /></button>
+        </div>
+        {[
+          ["pont", "Le pont", Gauge],
+          ["equipage", "L'équipage", Users],
+          ["recrue", "Enrôler un matelot", Plus],
+          ["comptes", "Mousses & accès", ShieldAlert],
+          ["reglages", "Cabine du capitaine", Settings],
+        ].map(([id, label, Icon]) => (
+          <button key={id} className={`kk-navitem ${vue === id ? "actif" : ""}`} onClick={() => naviguer(id)}>
+            <Icon size={18} /> <span>{label}</span> <ChevronRight size={16} className="kk-chev" />
+          </button>
+        ))}
+        <div className="kk-drawer-foot">
+          <Anchor size={13} /> flotte de {fmt(stats.total)} — conçue pour 10 000
+        </div>
+      </nav>
+
+      {/* ---------- CONTENU ---------- */}
+      <main className="kk-main">
+        {vue === "pont" && <Pont stats={stats} flotte={flotteFiltree} onOuvrir={setSelection} />}
+        {vue === "equipage" && (
+          <Equipage
+            flotte={flotteFiltree} recherche={recherche} setRecherche={setRecherche}
+            onOuvrir={setSelection}
+            onToggle={(id) => setFlotte((f) => f.map((b) => b.id === id
+              ? { ...b, etat: b.etat === "en mer" ? "à quai" : "en mer" } : b))}
+          />
+        )}
+        {vue === "recrue" && <Recrue />}
+        {vue === "comptes" && <Comptes />}
+        {vue === "reglages" && <Reglages stats={stats} />}
+      </main>
+
+      {/* ---------- FICHE MATELOT ---------- */}
+      {selection && (
+        <FicheMatelot
+          bot={flotte.find((b) => b.id === selection.id) || selection}
+          onFermer={() => setSelection(null)}
+          onToggle={(id) => setFlotte((f) => f.map((b) => b.id === id
+            ? { ...b, etat: b.etat === "en mer" ? "à quai" : "en mer" } : b))}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ====================== LE PONT (tableau de bord) ====================== */
+function Pont({ stats, flotte, onOuvrir }) {
+  return (
+    <div className="kk-view">
+      <Titre eyebrow="Vue d'ensemble" titre="Le pont" />
+
+      {/* Cadran principal : la barre du navire */}
+      <div className="kk-helm">
+        <div className="kk-helm-ring">
+          <div className="kk-helm-val">{fmt(stats.clics)}</div>
+          <div className="kk-helm-lab">clics, toute la flotte</div>
+        </div>
+        <div className="kk-helm-side">
+          <HelmStat val={`${stats.enMer}/${stats.total}`} lab="matelots en mer" tone="vert" />
+          <HelmStat val={fmt(stats.ip)} lab="changements d'IP aujourd'hui" tone="cyan" />
+        </div>
+      </div>
+
+      {/* Jauges secondaires */}
+      <div className="kk-gauges">
+        <Jauge icon={Users} val={fmt(stats.total)} lab="matelots à bord" />
+        <Jauge icon={Bug} val={stats.bugs} lab="à la dérive (buggés)" tone={stats.bugs ? "rouge" : ""} />
+        <Jauge icon={AlertTriangle} val={stats.anomalies} lab="actions anormales"
+               tone={stats.anomalies ? "ambre" : ""} />
+        <Jauge icon={Repeat} val={fmt(stats.ip)} lab="rotations d'IP" />
+      </div>
+
+      {/* Manifeste : clics par matelot */}
+      <div className="kk-panel">
+        <div className="kk-panel-head">
+          <MousePointerClick size={16} /> <span>Manifeste — clics par matelot</span>
+        </div>
+        <div className="kk-manifeste">
+          {flotte.slice(0, 12).map((b) => {
+            const max = Math.max(...flotte.map((x) => x.clics), 1);
+            return (
+              <button key={b.id} className="kk-manif-row" onClick={() => onOuvrir(b)}>
+                <span className="kk-manif-id" style={{ color: b.couleur }}>#{b.id}</span>
+                <span className="kk-manif-nom">{b.nom}</span>
+                <div className="kk-manif-bar">
+                  <div className="kk-manif-fill"
+                       style={{ width: `${(b.clics / max) * 100}%`, background: b.couleur }} />
+                </div>
+                <span className="kk-manif-val">{fmt(b.clics)}</span>
+                <span className="kk-dot" style={{ background: etatColor(b.etat) }} />
+              </button>
+            );
+          })}
+        </div>
+        <div className="kk-panel-foot">
+          12 premiers — ouvre « L'équipage » pour la flotte entière
+          {flotte.some((b) => b.etat === "à quai") &&
+            <span className="kk-pique"> · les matelots à quai ? des marins d'eau douce 🦜</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HelmStat({ val, lab, tone }) {
+  return (
+    <div className={`kk-helmstat ${tone}`}>
+      <div className="kk-helmstat-val">{val}</div>
+      <div className="kk-helmstat-lab">{lab}</div>
+    </div>
+  );
+}
+function Jauge({ icon: Icon, val, lab, tone = "" }) {
+  return (
+    <div className={`kk-jauge ${tone}`}>
+      <Icon size={18} className="kk-jauge-icon" />
+      <div className="kk-jauge-val">{val}</div>
+      <div className="kk-jauge-lab">{lab}</div>
+    </div>
+  );
+}
+
+/* ====================== L'ÉQUIPAGE (liste + captures) ====================== */
+function Equipage({ flotte, recherche, setRecherche, onOuvrir, onToggle }) {
+  return (
+    <div className="kk-view">
+      <Titre eyebrow="État de la flotte" titre="L'équipage" />
+      <div className="kk-search">
+        <Search size={16} />
+        <input value={recherche} onChange={(e) => setRecherche(e.target.value)}
+               placeholder="Chercher un matelot ou un mousse…" />
+      </div>
+      <div className="kk-grid">
+        {flotte.map((b) => (
+          <div key={b.id} className="kk-card">
+            <button className="kk-card-screen" onClick={() => onOuvrir(b)}>
+              <FauxEcran bot={b} />
+              <span className="kk-card-eye"><Eye size={14} /> voir le direct</span>
+            </button>
+            <div className="kk-card-body">
+              <div className="kk-card-top">
+                <span className="kk-card-nom">{b.nom}</span>
+                <span className="kk-statut" style={{ color: etatColor(b.etat) }}>
+                  <span className="kk-dot" style={{ background: etatColor(b.etat) }} />{b.etat}
+                </span>
+              </div>
+              <div className="kk-card-meta">
+                <span style={{ color: b.couleur }}>{b.scenarioNom}</span> · {b.proprio}
+              </div>
+              <div className="kk-card-stats">
+                <span><MousePointerClick size={12} /> {fmt(b.clics)}</span>
+                <span><Repeat size={12} /> {b.ipChanges} IP</span>
+                {b.anomalies > 0 && <span className="kk-warn"><AlertTriangle size={12} /> {b.anomalies}</span>}
+              </div>
+              <button className="kk-toggle" onClick={() => onToggle(b.id)}>
+                {b.etat === "en mer" ? <><Pause size={13} /> Mettre à quai</> : <><Play size={13} /> Larguer</>}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Faux écran de bot — vraie capture / vidéo viendra du worker (CDP screencast) */
+function FauxEcran({ bot }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    let raf, t = 0;
+    const draw = () => {
+      t += 0.02;
+      ctx.fillStyle = "#0a141c"; ctx.fillRect(0, 0, c.width, c.height);
+      // pseudo "fenêtre de jeu HTML"
+      ctx.fillStyle = "#13212e"; ctx.fillRect(8, 8, c.width - 16, 18);
+      ctx.fillStyle = bot.couleur;
+      for (let i = 0; i < 3; i++) ctx.fillRect(14 + i * 8, 13, 5, 5);
+      ctx.fillStyle = "#1a2c3a";
+      ctx.fillRect(8, 32, c.width - 16, c.height - 40);
+      // curseur qui "clique"
+      if (bot.etat === "en mer") {
+        const x = c.width / 2 + Math.cos(t) * 22;
+        const y = c.height / 2 + Math.sin(t * 1.3) * 14;
+        ctx.fillStyle = (Math.sin(t * 6) > 0.7) ? bot.couleur : "#e9eef2";
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = "#33485a"; ctx.font = "10px monospace";
+        ctx.fillText(bot.etat === "buggé" ? "⚠ à la dérive" : "à quai", 14, c.height / 2);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, [bot.couleur, bot.etat]);
+  return <canvas ref={ref} width={220} height={120} className="kk-canvas" />;
+}
+
+/* ====================== FICHE MATELOT (direct + réglages) ====================== */
+function FicheMatelot({ bot, onFermer, onToggle }) {
+  return (
+    <>
+      <div className="kk-scrim" onClick={onFermer} />
+      <aside className="kk-fiche">
+        <div className="kk-fiche-head">
+          <div>
+            <div className="kk-fiche-nom">{bot.nom}</div>
+            <div className="kk-fiche-sub" style={{ color: bot.couleur }}>{bot.scenarioNom}</div>
+          </div>
+          <button onClick={onFermer} aria-label="Fermer"><X size={20} /></button>
+        </div>
+
+        <div className="kk-live">
+          <div className="kk-live-tag"><Camera size={12} /> DIRECT</div>
+          <FauxEcran bot={bot} />
+        </div>
+
+        {bot.etat === "buggé" && (
+          <div className="kk-overboard">
+            <AlertTriangle size={15} /> Un homme à la mer ! Ce matelot a décroché — relance-le ou repêche-le.
+          </div>
+        )}
+
+        <div className="kk-fiche-stats">
+          <FicheStat lab="Clics totaux" val={fmt(bot.clics)} />
+          <FicheStat lab="Rotations d'IP" val={bot.ipChanges} />
+          <FicheStat lab="Propriétaire" val={bot.proprio} />
+          <FicheStat lab="Dernier battement" val={`${bot.dernierBattement}s`}
+                     alerte={bot.dernierBattement > 60} />
+          <FicheStat lab="Actions anormales" val={bot.anomalies} alerte={bot.anomalies > 0} />
+          <FicheStat lab="État" val={bot.etat} />
+        </div>
+
+        <div className="kk-fiche-actions">
+          <button className="kk-btn-primaire" onClick={() => onToggle(bot.id)}>
+            {bot.etat === "en mer" ? <><Pause size={15} /> Mettre à quai</> : <><Play size={15} /> Larguer</>}
+          </button>
+          <button className="kk-btn-ghost"><Settings size={15} /> Réglages & débogage</button>
+          <button className="kk-btn-danger"><Power size={15} /> Renvoyer ce matelot</button>
+        </div>
+
+        <div className="kk-fiche-note">
+          Le direct et les réglages tirent leur état du dernier battement du matelot.
+          Aucun ordre n'est exécuté ici sans validation côté serveur.
+        </div>
+      </aside>
+    </>
+  );
+}
+function FicheStat({ lab, val, alerte }) {
+  return (
+    <div className={`kk-fichestat ${alerte ? "alerte" : ""}`}>
+      <div className="kk-fichestat-lab">{lab}</div>
+      <div className="kk-fichestat-val">{val}</div>
+    </div>
+  );
+}
+
+/* ====================== ENRÔLER (ajouter des bots) ====================== */
+function Recrue() {
+  const [nb, setNb] = useState(1);
+  const [sc, setSc] = useState(SCENARIOS[0].id);
+  const [proprio, setProprio] = useState(PROPRIOS[1]);
+  return (
+    <div className="kk-view">
+      <Titre eyebrow="Renforts" titre="Enrôler un matelot" />
+      <div className="kk-form">
+        <label className="kk-field">
+          <span>Combien de matelots ?</span>
+          <div className="kk-stepper">
+            <button onClick={() => setNb((n) => Math.max(1, n - 1))}>−</button>
+            <input type="number" value={nb} min={1}
+                   onChange={(e) => setNb(Math.max(1, +e.target.value || 1))} />
+            <button onClick={() => setNb((n) => n + 1)}>+</button>
+          </div>
+          <small>Un matelot identique se duplique en une ligne. 1 ou 10 000, même geste.</small>
+        </label>
+
+        <label className="kk-field">
+          <span>Mission (scénario validé)</span>
+          <div className="kk-choices">
+            {SCENARIOS.map((s) => (
+              <button key={s.id} className={`kk-choice ${sc === s.id ? "actif" : ""}`}
+                      onClick={() => setSc(s.id)} style={{ "--c": s.couleur }}>
+                {s.nom}
+              </button>
+            ))}
+          </div>
+          <small>Les missions sont un menu fermé. Toi seul en ajoutes — personne n'improvise.</small>
+        </label>
+
+        <label className="kk-field">
+          <span>Pour quel mousse ?</span>
+          <select value={proprio} onChange={(e) => setProprio(e.target.value)} className="kk-select">
+            {PROPRIOS.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        </label>
+
+        <button className="kk-btn-primaire kk-btn-lg">
+          <Plus size={16} /> Enrôler {nb} matelot{nb > 1 ? "s" : ""} — en avant, moussaillons !
+        </button>
+        <div className="kk-recap">
+          Tu t'apprêtes à larguer <strong>{nb}</strong> matelot{nb > 1 ? "s" : ""} sur
+          {" "}<strong style={{ color: SCENARIOS.find((s) => s.id === sc).couleur }}>
+          {SCENARIOS.find((s) => s.id === sc).nom}</strong> pour <strong>{proprio}</strong>.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ====================== MOUSSES & ACCÈS (admin) ====================== */
+function Comptes() {
+  const mousses = [
+    { nom: "Mehdi", bots: 9, actif: true, anomalies: 0 },
+    { nom: "Sofiane", bots: 12, actif: true, anomalies: 2 },
+    { nom: "Yanis", bots: 7, actif: true, anomalies: 0 },
+    { nom: "Rayan", bots: 6, actif: false, anomalies: 5 },
+  ];
+  return (
+    <div className="kk-view">
+      <Titre eyebrow="Capitainerie" titre="Mousses & accès" />
+      <p className="kk-lede">
+        Chaque mousse ne voit que ses matelots et ne choisit que parmi les missions validées.
+        Couper un accès est immédiat — d'un seul geste, côté serveur.
+      </p>
+      <div className="kk-mousses">
+        {mousses.map((m) => (
+          <div key={m.nom} className={`kk-mousse ${m.actif ? "" : "coupe"}`}>
+            <div className="kk-mousse-av">{m.nom[0]}</div>
+            <div className="kk-mousse-info">
+              <div className="kk-mousse-nom">{m.nom}</div>
+              <div className="kk-mousse-meta">
+                {m.bots} matelots
+                {m.anomalies > 0 && <span className="kk-warn"> · {m.anomalies} alertes</span>}
+              </div>
+            </div>
+            <button className={`kk-acces ${m.actif ? "on" : "off"}`}>
+              <Power size={14} /> {m.actif ? "Accès ouvert" : "Coupé"}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="kk-panel kk-admin-note">
+        <ShieldAlert size={16} />
+        <div>
+          <strong>Garde du capitaine.</strong> Ton vrai contrôle tient à trois choses :
+          toi seul crées les comptes, les missions sont un menu fermé, et l'accès se coupe
+          en un clic côté serveur. Pas besoin de retenir leurs identifiants pour rester maître à bord.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ====================== CABINE (réglages) ====================== */
+function Reglages({ stats }) {
+  return (
+    <div className="kk-view">
+      <Titre eyebrow="Réglages" titre="Cabine du capitaine" />
+      <div className="kk-panel">
+        <div className="kk-panel-head"><Activity size={16} /> <span>Santé de la flotte</span></div>
+        <div className="kk-health">
+          <div><span>{fmt(stats.clics)}</span><small>clics cumulés</small></div>
+          <div><span>{stats.enMer}/{stats.total}</span><small>en mer</small></div>
+          <div className={stats.bugs ? "bad" : ""}><span>{stats.bugs}</span><small>à la dérive</small></div>
+          <div className={stats.anomalies ? "warn" : ""}><span>{stats.anomalies}</span><small>anomalies</small></div>
+        </div>
+      </div>
+      <div className="kk-panel">
+        <div className="kk-panel-head"><ShieldAlert size={16} /> <span>Signatures de pub</span></div>
+        <p className="kk-lede" style={{ margin: "0 0 12px" }}>
+          Quand un matelot croise une pub, il la ferme grâce à ces signatures.
+          Ajoute un motif ici, il s'applique à toute la flotte d'un coup.
+        </p>
+        <div className="kk-sigs">
+          {["bouton .close-ad", "texte « Passer »", "overlay plein écran", "iframe googleads"].map((s) => (
+            <span key={s} className="kk-sig">{s} <X size={12} /></span>
+          ))}
+          <button className="kk-sig kk-sig-add"><Plus size={12} /> ajouter</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ====================== UI atoms ====================== */
+function Titre({ eyebrow, titre }) {
+  return (
+    <div className="kk-titre">
+      <span className="kk-eyebrow">{eyebrow}</span>
+      <h1>{titre}</h1>
+    </div>
+  );
+}
+
+/* ====================== STYLE ====================== */
+const CSS = `
+:root{
+  --abysse:#071019; --coque:#0d1c28; --pont:#11283a; --planche:#163348;
+  --corde:#1f4357; --brume:#7c97a8; --ecume:#e9eef2;
+  --laiton:#e8b04b; --cuivre:#c47a5f; --cyan:#5fb0c4;
+  --vert:#4fd6a0; --rouge:#ff6b6b; --ambre:#ffc24d;
+}
+*{box-sizing:border-box}
+.kk-root{
+  min-height:100vh;background:
+    radial-gradient(1200px 500px at 80% -10%, #14324a55, transparent),
+    linear-gradient(180deg,var(--abysse),var(--coque));
+  color:var(--ecume);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- Barre ---- */
+.kk-bar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;
+  padding:14px 16px;background:rgba(7,16,25,.82);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--corde)}
+.kk-burger{background:var(--planche);border:1px solid var(--corde);color:var(--ecume);
+  border-radius:12px;padding:9px;display:grid;place-items:center;cursor:pointer;transition:.2s}
+.kk-burger:hover{background:var(--corde)}
+.kk-brand{display:flex;align-items:center;gap:10px;flex:1}
+.kk-anchor{color:var(--laiton)}
+.kk-brand-txt{display:flex;flex-direction:column;line-height:1}
+.kk-name{font-family:'Georgia',serif;font-weight:700;letter-spacing:.08em;font-size:15px}
+.kk-sub{font-size:10px;color:var(--brume);letter-spacing:.22em;text-transform:uppercase;margin-top:3px}
+.kk-radio{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--vert);
+  background:#0c2418;border:1px solid #1c4c38;padding:6px 10px;border-radius:20px}
+.kk-radio.alerte{color:var(--rouge);background:#2a1014;border-color:#5a2228}
+.kk-radio svg{animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.4}}
+
+/* ---- Tiroir ---- */
+.kk-scrim{position:fixed;inset:0;background:rgba(3,8,12,.6);backdrop-filter:blur(2px);z-index:35}
+.kk-drawer{position:fixed;top:0;left:0;bottom:0;width:min(82vw,320px);z-index:40;
+  background:linear-gradient(180deg,var(--coque),var(--abysse));
+  border-right:1px solid var(--corde);transform:translateX(-100%);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:18px}
+.kk-drawer.ouvert{transform:translateX(0)}
+.kk-drawer-head{display:flex;justify-content:space-between;align-items:center;
+  font-family:'Georgia',serif;letter-spacing:.06em;margin-bottom:18px;color:var(--laiton)}
+.kk-drawer-head button{background:none;border:none;color:var(--brume);cursor:pointer}
+.kk-navitem{display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;
+  background:none;border:none;border-radius:11px;color:var(--ecume);font-size:14px;
+  cursor:pointer;text-align:left;transition:.18s;margin-bottom:2px}
+.kk-navitem:hover{background:var(--pont)}
+.kk-navitem.actif{background:var(--planche);color:var(--laiton)}
+.kk-navitem span{flex:1}
+.kk-chev{color:var(--brume);opacity:0;transition:.18s}
+.kk-navitem:hover .kk-chev{opacity:1}
+.kk-drawer-foot{margin-top:auto;display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--brume);padding-top:16px;border-top:1px solid var(--corde)}
+
+/* ---- Layout ---- */
+.kk-main{max-width:1100px;margin:0 auto;padding:22px 16px 80px}
+.kk-view{animation:rise .4s ease}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.kk-titre{margin-bottom:20px}
+.kk-eyebrow{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--laiton)}
+.kk-titre h1{font-family:'Georgia',serif;font-size:30px;margin:6px 0 0;font-weight:700;letter-spacing:.01em}
+.kk-lede{color:var(--brume);font-size:14px;line-height:1.6;max-width:60ch;margin:0 0 18px}
+
+/* ---- Cadran / barre ---- */
+.kk-helm{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:14px}
+@media(min-width:680px){.kk-helm{grid-template-columns:1.1fr 1fr}}
+.kk-helm-ring{position:relative;background:
+   radial-gradient(circle at 50% 40%, #16384f, var(--pont));
+  border:1px solid var(--corde);border-radius:20px;padding:34px 20px;text-align:center;overflow:hidden}
+.kk-helm-ring::before{content:"";position:absolute;inset:-2px;border-radius:20px;
+  background:conic-gradient(from 0deg,transparent,var(--laiton)44,transparent 30%);
+  animation:spin 8s linear infinite;z-index:0;opacity:.5}
+.kk-helm-ring::after{content:"";position:absolute;inset:3px;border-radius:18px;background:
+   radial-gradient(circle at 50% 40%, #16384f, var(--pont));z-index:1}
+@keyframes spin{to{transform:rotate(360deg)}}
+.kk-helm-val,.kk-helm-lab{position:relative;z-index:2}
+.kk-helm-val{font-family:'Georgia',serif;font-size:clamp(40px,11vw,64px);font-weight:700;
+  color:var(--laiton);line-height:1;letter-spacing:-.02em}
+.kk-helm-lab{margin-top:8px;color:var(--brume);font-size:13px;letter-spacing:.05em}
+.kk-helm-side{display:grid;gap:14px}
+.kk-helmstat{background:var(--pont);border:1px solid var(--corde);border-radius:16px;
+  padding:20px;display:flex;flex-direction:column;justify-content:center}
+.kk-helmstat.vert{border-left:3px solid var(--vert)}
+.kk-helmstat.cyan{border-left:3px solid var(--cyan)}
+.kk-helmstat-val{font-family:'Georgia',serif;font-size:32px;font-weight:700}
+.kk-helmstat-lab{color:var(--brume);font-size:12px;margin-top:4px}
+
+/* ---- Jauges ---- */
+.kk-gauges{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px}
+@media(min-width:680px){.kk-gauges{grid-template-columns:repeat(4,1fr)}}
+.kk-jauge{background:var(--pont);border:1px solid var(--corde);border-radius:14px;padding:16px}
+.kk-jauge.rouge{border-color:#5a2228;background:#1c1013}
+.kk-jauge.ambre{border-color:#5a4a1c;background:#1c1810}
+.kk-jauge-icon{color:var(--brume)}
+.kk-jauge.rouge .kk-jauge-icon{color:var(--rouge)}
+.kk-jauge.ambre .kk-jauge-icon{color:var(--ambre)}
+.kk-jauge-val{font-family:'Georgia',serif;font-size:26px;font-weight:700;margin:8px 0 2px}
+.kk-jauge-lab{font-size:11px;color:var(--brume)}
+
+/* ---- Panels ---- */
+.kk-panel{background:var(--pont);border:1px solid var(--corde);border-radius:16px;
+  padding:16px;margin-bottom:16px}
+.kk-panel-head{display:flex;align-items:center;gap:8px;font-size:13px;
+  letter-spacing:.04em;color:var(--ecume);margin-bottom:14px}
+.kk-panel-head svg{color:var(--laiton)}
+.kk-panel-foot{font-size:11px;color:var(--brume);margin-top:10px;text-align:center}
+.kk-pique{color:var(--laiton);font-style:italic}
+
+/* ---- Manifeste ---- */
+.kk-manifeste{display:flex;flex-direction:column;gap:3px}
+.kk-manif-row{display:grid;grid-template-columns:38px 1fr 2.2fr auto 10px;align-items:center;
+  gap:10px;background:none;border:none;color:var(--ecume);padding:7px 6px;border-radius:9px;
+  cursor:pointer;transition:.15s;text-align:left;width:100%}
+.kk-manif-row:hover{background:var(--planche)}
+.kk-manif-id{font-family:monospace;font-size:12px;font-weight:700}
+.kk-manif-nom{font-size:13px;color:var(--brume);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kk-manif-bar{height:7px;background:var(--abysse);border-radius:4px;overflow:hidden}
+.kk-manif-fill{height:100%;border-radius:4px;transition:width .6s}
+.kk-manif-val{font-family:monospace;font-size:12px;text-align:right;min-width:48px}
+.kk-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* ---- Search ---- */
+.kk-search{display:flex;align-items:center;gap:10px;background:var(--pont);
+  border:1px solid var(--corde);border-radius:13px;padding:11px 14px;margin-bottom:16px}
+.kk-search svg{color:var(--brume)}
+.kk-search input{flex:1;background:none;border:none;color:var(--ecume);font-size:14px;outline:none}
+
+/* ---- Grid équipage ---- */
+.kk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.kk-card{background:var(--pont);border:1px solid var(--corde);border-radius:16px;overflow:hidden;
+  transition:.2s}
+.kk-card:hover{border-color:var(--corde);transform:translateY(-2px);
+  box-shadow:0 12px 30px -12px #000a}
+.kk-card-screen{position:relative;display:block;width:100%;border:none;padding:0;cursor:pointer;
+  background:var(--abysse);line-height:0}
+.kk-canvas{width:100%;height:auto;display:block}
+.kk-card-eye{position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:5px;
+  font-size:10px;background:rgba(7,16,25,.78);color:var(--ecume);padding:4px 8px;border-radius:8px;
+  opacity:0;transition:.2s;line-height:1}
+.kk-card-screen:hover .kk-card-eye{opacity:1}
+.kk-card-body{padding:13px}
+.kk-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.kk-card-nom{font-weight:600;font-size:14px}
+.kk-statut{display:flex;align-items:center;gap:5px;font-size:11px}
+.kk-card-meta{font-size:11px;color:var(--brume);margin:5px 0 9px}
+.kk-card-stats{display:flex;gap:12px;font-size:11px;color:var(--brume);margin-bottom:11px;flex-wrap:wrap}
+.kk-card-stats span{display:flex;align-items:center;gap:4px}
+.kk-warn{color:var(--ambre)!important}
+.kk-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--planche);border:1px solid var(--corde);color:var(--ecume);
+  border-radius:10px;padding:9px;font-size:12px;cursor:pointer;transition:.18s}
+.kk-toggle:hover{background:var(--corde)}
+
+/* ---- Fiche ---- */
+.kk-fiche{position:fixed;top:0;right:0;bottom:0;width:min(92vw,420px);z-index:40;
+  background:linear-gradient(180deg,var(--coque),var(--abysse));border-left:1px solid var(--corde);
+  padding:20px;overflow-y:auto;animation:slideL .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes slideL{from{transform:translateX(100%)}}
+.kk-fiche-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.kk-fiche-nom{font-family:'Georgia',serif;font-size:22px;font-weight:700}
+.kk-fiche-sub{font-size:12px;margin-top:3px}
+.kk-fiche-head button{background:none;border:none;color:var(--brume);cursor:pointer}
+.kk-live{position:relative;background:var(--abysse);border:1px solid var(--corde);
+  border-radius:14px;overflow:hidden;margin-bottom:16px;line-height:0}
+.kk-live .kk-canvas{width:100%}
+.kk-live-tag{position:absolute;top:9px;left:9px;z-index:2;display:flex;align-items:center;gap:5px;
+  font-size:10px;letter-spacing:.1em;background:#2a1014;color:var(--rouge);padding:4px 8px;
+  border-radius:7px;line-height:1}
+.kk-live-tag svg{animation:pulse 1.4s infinite}
+.kk-fiche-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.kk-fichestat{background:var(--pont);border:1px solid var(--corde);border-radius:11px;padding:11px 13px}
+.kk-fichestat.alerte{border-color:#5a4a1c;background:#1c1810}
+.kk-fichestat-lab{font-size:10px;color:var(--brume);text-transform:uppercase;letter-spacing:.08em}
+.kk-fichestat-val{font-family:'Georgia',serif;font-size:18px;font-weight:700;margin-top:3px}
+.kk-fiche-actions{display:flex;flex-direction:column;gap:9px;margin-bottom:14px}
+.kk-fiche-note{font-size:11px;color:var(--brume);line-height:1.6;border-top:1px solid var(--corde);
+  padding-top:13px}
+
+/* ---- Boutons ---- */
+.kk-btn-primaire,.kk-btn-ghost,.kk-btn-danger{display:flex;align-items:center;justify-content:center;
+  gap:7px;border-radius:11px;padding:12px;font-size:13px;cursor:pointer;border:1px solid;transition:.18s;
+  font-weight:500}
+.kk-btn-primaire{background:var(--laiton);color:#1a1206;border-color:var(--laiton)}
+.kk-btn-primaire:hover{filter:brightness(1.08)}
+.kk-btn-ghost{background:var(--planche);color:var(--ecume);border-color:var(--corde)}
+.kk-btn-ghost:hover{background:var(--corde)}
+.kk-btn-danger{background:#1c1013;color:var(--rouge);border-color:#5a2228}
+.kk-btn-danger:hover{background:#2a1014}
+.kk-btn-lg{padding:15px;font-size:14px}
+
+/* ---- Formulaire recrue ---- */
+.kk-form{max-width:560px;display:flex;flex-direction:column;gap:22px}
+.kk-field{display:flex;flex-direction:column;gap:9px}
+.kk-field>span{font-size:13px;font-weight:600}
+.kk-field small{font-size:11px;color:var(--brume);line-height:1.5}
+.kk-stepper{display:flex;align-items:center;gap:0;width:fit-content;
+  border:1px solid var(--corde);border-radius:11px;overflow:hidden;background:var(--pont)}
+.kk-stepper button{background:var(--planche);border:none;color:var(--ecume);width:42px;height:42px;
+  font-size:20px;cursor:pointer}
+.kk-stepper button:hover{background:var(--corde)}
+.kk-stepper input{width:90px;height:42px;background:none;border:none;color:var(--ecume);
+  text-align:center;font-size:18px;font-family:'Georgia',serif;outline:none}
+.kk-choices{display:flex;flex-wrap:wrap;gap:8px}
+.kk-choice{background:var(--pont);border:1px solid var(--corde);color:var(--brume);
+  padding:10px 14px;border-radius:10px;font-size:13px;cursor:pointer;transition:.18s}
+.kk-choice:hover{border-color:var(--c);color:var(--ecume)}
+.kk-choice.actif{background:color-mix(in srgb,var(--c) 16%,transparent);
+  border-color:var(--c);color:var(--ecume)}
+.kk-select{background:var(--pont);border:1px solid var(--corde);color:var(--ecume);
+  padding:12px;border-radius:11px;font-size:14px;outline:none}
+.kk-recap{font-size:13px;color:var(--brume);line-height:1.6;background:var(--pont);
+  border:1px dashed var(--corde);border-radius:12px;padding:14px}
+.kk-recap strong{color:var(--ecume)}
+
+/* ---- Mousses ---- */
+.kk-mousses{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.kk-mousse{display:flex;align-items:center;gap:13px;background:var(--pont);
+  border:1px solid var(--corde);border-radius:14px;padding:13px}
+.kk-mousse.coupe{opacity:.6}
+.kk-mousse-av{width:42px;height:42px;border-radius:11px;background:var(--planche);
+  display:grid;place-items:center;font-family:'Georgia',serif;font-weight:700;color:var(--laiton);
+  border:1px solid var(--corde)}
+.kk-mousse-info{flex:1}
+.kk-mousse-nom{font-weight:600;font-size:14px}
+.kk-mousse-meta{font-size:11px;color:var(--brume);margin-top:2px}
+.kk-acces{display:flex;align-items:center;gap:6px;border-radius:9px;padding:8px 12px;
+  font-size:11px;cursor:pointer;border:1px solid;transition:.18s}
+.kk-acces.on{background:#0c2418;color:var(--vert);border-color:#1c4c38}
+.kk-acces.off{background:#2a1014;color:var(--rouge);border-color:#5a2228}
+.kk-admin-note{display:flex;gap:12px;align-items:flex-start;font-size:12px;color:var(--brume);
+  line-height:1.6}
+.kk-admin-note svg{color:var(--laiton);flex-shrink:0;margin-top:2px}
+.kk-admin-note strong{color:var(--ecume)}
+
+/* ---- Santé / signatures ---- */
+.kk-health{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:560px){.kk-health{grid-template-columns:repeat(4,1fr)}}
+.kk-health>div{background:var(--planche);border:1px solid var(--corde);border-radius:11px;
+  padding:13px;text-align:center}
+.kk-health span{display:block;font-family:'Georgia',serif;font-size:24px;font-weight:700}
+.kk-health small{font-size:11px;color:var(--brume)}
+.kk-health .bad span{color:var(--rouge)}
+.kk-health .warn span{color:var(--ambre)}
+.kk-sigs{display:flex;flex-wrap:wrap;gap:8px}
+.kk-sig{display:flex;align-items:center;gap:6px;background:var(--planche);border:1px solid var(--corde);
+  color:var(--brume);padding:8px 11px;border-radius:9px;font-size:12px;cursor:pointer}
+.kk-sig svg{color:var(--brume)}
+.kk-sig-add{color:var(--laiton);border-style:dashed}
+
+.kk-overboard{display:flex;align-items:center;gap:9px;background:#2a1014;border:1px solid #5a2228;
+  color:var(--rouge);border-radius:11px;padding:11px 13px;font-size:12px;line-height:1.5;
+  margin-bottom:16px;animation:bob 2s ease-in-out infinite}
+.kk-overboard svg{flex-shrink:0}
+@keyframes bob{50%{transform:translateY(-2px)}}
+
+*:focus-visible{outline:2px solid var(--laiton);outline-offset:2px;border-radius:8px}
+`;
