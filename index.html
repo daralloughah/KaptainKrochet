@@ -146,12 +146,27 @@ const SCENARIOS = [
     { id: "daily_c", nom: "Tour quotidien — Jeu C", couleur: "#c47a5f" },
 ];
 const PROPRIOS = ["Toi", "Mehdi", "Sofiane", "Yanis", "Rayan"];
+// Pays disponibles pour le ciblage géographique des proxies.
+// Ajoute une ligne ici (ou une entrée en base) pour proposer un nouveau pays — zéro autre code à toucher.
+const PAYS = [
+    { code: "us", nom: "États-Unis", drapeau: "🇺🇸" },
+    { code: "ca", nom: "Canada", drapeau: "🇨🇦" },
+    { code: "au", nom: "Australie", drapeau: "🇦🇺" },
+];
+// Navires = serveurs physiques sur lesquels tourne la flotte.
+const NAVIRES = [
+    { id: "nav1", nom: "Le Corsaire" },
+    { id: "nav2", nom: "La Méduse" },
+    { id: "nav3", nom: "Le Triton" },
+];
 function genFlotte(n) {
     const arr = [];
     for (let i = 1; i <= n; i++) {
         const sc = SCENARIOS[i % SCENARIOS.length];
         const bug = Math.random() < 0.06;
         const anomalies = Math.random() < 0.12 ? Math.floor(Math.random() * 4) + 1 : 0;
+        const pays = PAYS[i % PAYS.length];
+        const navire = NAVIRES[i % NAVIRES.length];
         arr.push({
             id: i,
             nom: `Matelot ${String(i).padStart(3, "0")}`,
@@ -164,6 +179,15 @@ function genFlotte(n) {
             anomalies,
             etat: bug ? "buggé" : Math.random() < 0.78 ? "en mer" : "à quai",
             dernierBattement: bug ? 240 + Math.floor(Math.random() * 600) : Math.floor(Math.random() * 14),
+            // --- réglages réseau, pilotés depuis la console ---
+            navireId: navire.id,
+            navireNom: navire.nom,
+            paysCode: pays.code,
+            paysNom: pays.nom,
+            paysDrapeau: pays.drapeau,
+            proxyPool: `pool-${pays.code}`,
+            rotationH: [2, 3, 4][i % 3], // rotation d'IP toutes les X heures (fixe)
+            ipActuelle: `${pays.code}-${100 + (i % 150)}.x.x.${i % 255}`,
         });
     }
     return arr;
@@ -251,7 +275,8 @@ function KaptainKrochet() {
             vue === "comptes" && React.createElement(Comptes, null),
             vue === "reglages" && React.createElement(Reglages, { stats: stats })),
         selection && (React.createElement(FicheMatelot, { bot: flotte.find((b) => b.id === selection.id) || selection, onFermer: () => setSelection(null), onToggle: (id) => setFlotte((f) => f.map((b) => b.id === id
-                ? Object.assign(Object.assign({}, b), { etat: b.etat === "en mer" ? "à quai" : "en mer" }) : b)) }))));
+                ? Object.assign(Object.assign({}, b), { etat: b.etat === "en mer" ? "à quai" : "en mer" }) : b)), onUpdate: (id, patch) => setFlotte((f) => f.map((b) => b.id === id
+                ? Object.assign(Object.assign({}, b), patch) : b)) }))));
 }
 /* ====================== LE PONT (tableau de bord) ====================== */
 function Pont({ stats, flotte, onOuvrir }) {
@@ -325,6 +350,13 @@ function Equipage({ flotte, recherche, setRecherche, onOuvrir, onToggle }) {
                     React.createElement("span", { style: { color: b.couleur } }, b.scenarioNom),
                     " \u00B7 ",
                     b.proprio),
+                React.createElement("div", { className: "kk-card-geo" },
+                    React.createElement("span", { title: "Pays de l'IP" },
+                        b.paysDrapeau,
+                        " ",
+                        b.paysNom),
+                    React.createElement("span", { className: "kk-card-geo-sep" }, "\u00B7"),
+                    React.createElement("span", { title: "Navire" }, b.navireNom)),
                 React.createElement("div", { className: "kk-card-stats" },
                     React.createElement("span", null,
                         React.createElement(MousePointerClick, { size: 12 }),
@@ -388,7 +420,9 @@ function FauxEcran({ bot }) {
     return React.createElement("canvas", { ref: ref, width: 220, height: 120, className: "kk-canvas" });
 }
 /* ====================== FICHE MATELOT (direct + réglages) ====================== */
-function FicheMatelot({ bot, onFermer, onToggle }) {
+function FicheMatelot({ bot, onFermer, onToggle, onUpdate }) {
+    const [reglagesOuverts, setReglagesOuverts] = useState(false);
+    const maj = (champ, valeur) => onUpdate(bot.id, { [champ]: valeur });
     return (React.createElement(React.Fragment, null,
         React.createElement("div", { className: "kk-scrim", onClick: onFermer }),
         React.createElement("aside", { className: "kk-fiche" },
@@ -413,19 +447,86 @@ function FicheMatelot({ bot, onFermer, onToggle }) {
                 React.createElement(FicheStat, { lab: "Dernier battement", val: `${bot.dernierBattement}s`, alerte: bot.dernierBattement > 60 }),
                 React.createElement(FicheStat, { lab: "Actions anormales", val: bot.anomalies, alerte: bot.anomalies > 0 }),
                 React.createElement(FicheStat, { lab: "\u00C9tat", val: bot.etat })),
+            React.createElement("div", { className: "kk-cap" },
+                React.createElement(Anchor, { size: 13 }),
+                " Position & cap du matelot"),
+            React.createElement("div", { className: "kk-reglages" },
+                React.createElement("label", { className: "kk-reg" },
+                    React.createElement("span", null,
+                        React.createElement(Anchor, { size: 13 }),
+                        " Navire (serveur)"),
+                    React.createElement("select", { className: "kk-select", value: bot.navireId, onChange: (e) => {
+                            const n = NAVIRES.find((x) => x.id === e.target.value);
+                            onUpdate(bot.id, { navireId: n.id, navireNom: n.nom });
+                        } }, NAVIRES.map((n) => React.createElement("option", { key: n.id, value: n.id }, n.nom)))),
+                React.createElement("label", { className: "kk-reg" },
+                    React.createElement("span", null, "\uD83C\uDF0D Pays de l'IP"),
+                    React.createElement("select", { className: "kk-select", value: bot.paysCode, onChange: (e) => {
+                            const p = PAYS.find((x) => x.code === e.target.value);
+                            onUpdate(bot.id, {
+                                paysCode: p.code, paysNom: p.nom, paysDrapeau: p.drapeau,
+                                proxyPool: `pool-${p.code}`,
+                            });
+                        } }, PAYS.map((p) => React.createElement("option", { key: p.code, value: p.code },
+                        p.drapeau,
+                        " ",
+                        p.nom)))),
+                React.createElement("label", { className: "kk-reg" },
+                    React.createElement("span", null,
+                        React.createElement(Repeat, { size: 13 }),
+                        " Proxy (pool)"),
+                    React.createElement("input", { className: "kk-input", value: bot.proxyPool, onChange: (e) => maj("proxyPool", e.target.value) })),
+                React.createElement("label", { className: "kk-reg" },
+                    React.createElement("span", null,
+                        React.createElement(Repeat, { size: 13 }),
+                        " Rotation d'IP \u2014 toutes les"),
+                    React.createElement("div", { className: "kk-rot" },
+                        React.createElement("div", { className: "kk-stepper kk-stepper-sm" },
+                            React.createElement("button", { onClick: () => maj("rotationH", Math.max(1, bot.rotationH - 1)) }, "\u2212"),
+                            React.createElement("input", { type: "number", value: bot.rotationH, min: 1, onChange: (e) => maj("rotationH", Math.max(1, +e.target.value || 1)) }),
+                            React.createElement("button", { onClick: () => maj("rotationH", bot.rotationH + 1) }, "+")),
+                        React.createElement("span", { className: "kk-rot-unit" }, "heures"))),
+                React.createElement("div", { className: "kk-ipnow" },
+                    "IP actuelle : ",
+                    React.createElement("strong", null,
+                        bot.paysDrapeau,
+                        " ",
+                        bot.ipActuelle),
+                    React.createElement("span", { className: "kk-ipnow-sub" },
+                        "prochaine rotation dans ~",
+                        bot.rotationH,
+                        "h"))),
             React.createElement("div", { className: "kk-fiche-actions" },
                 React.createElement("button", { className: "kk-btn-primaire", onClick: () => onToggle(bot.id) }, bot.etat === "en mer" ? React.createElement(React.Fragment, null,
                     React.createElement(Pause, { size: 15 }),
                     " Mettre \u00E0 quai") : React.createElement(React.Fragment, null,
                     React.createElement(Play, { size: 15 }),
                     " Larguer")),
-                React.createElement("button", { className: "kk-btn-ghost" },
+                React.createElement("button", { className: "kk-btn-ghost", onClick: () => setReglagesOuverts((v) => !v) },
                     React.createElement(Settings, { size: 15 }),
-                    " R\u00E9glages & d\u00E9bogage"),
+                    " D\u00E9bogage avanc\u00E9"),
+                reglagesOuverts && (React.createElement("div", { className: "kk-debug" },
+                    React.createElement("div", { className: "kk-debug-row" },
+                        React.createElement("span", null, "scenario_id"),
+                        React.createElement("code", null, bot.scenario)),
+                    React.createElement("div", { className: "kk-debug-row" },
+                        React.createElement("span", null, "navire_id"),
+                        React.createElement("code", null, bot.navireId)),
+                    React.createElement("div", { className: "kk-debug-row" },
+                        React.createElement("span", null, "proxy_pool"),
+                        React.createElement("code", null, bot.proxyPool)),
+                    React.createElement("div", { className: "kk-debug-row" },
+                        React.createElement("span", null, "rotation_h"),
+                        React.createElement("code", null, bot.rotationH)),
+                    React.createElement("div", { className: "kk-debug-row" },
+                        React.createElement("span", null, "dernier_battement"),
+                        React.createElement("code", null,
+                            bot.dernierBattement,
+                            "s")))),
                 React.createElement("button", { className: "kk-btn-danger" },
                     React.createElement(Power, { size: 15 }),
                     " Renvoyer ce matelot")),
-            React.createElement("div", { className: "kk-fiche-note" }, "Le direct et les r\u00E9glages tirent leur \u00E9tat du dernier battement du matelot. Aucun ordre n'est ex\u00E9cut\u00E9 ici sans validation c\u00F4t\u00E9 serveur."))));
+            React.createElement("div", { className: "kk-fiche-note" }, "Tu modifies ici \u2192 l'ordre s'\u00E9crit en base \u2192 le matelot l'applique \u00E0 son prochain cycle. Le pays, le proxy et la rotation sont propres \u00E0 ce matelot."))));
 }
 function FicheStat({ lab, val, alerte }) {
     return (React.createElement("div", { className: `kk-fichestat ${alerte ? "alerte" : ""}` },
@@ -809,6 +910,37 @@ const CSS = `
   margin-bottom:16px;animation:bob 2s ease-in-out infinite}
 .kk-overboard svg{flex-shrink:0}
 @keyframes bob{50%{transform:translateY(-2px)}}
+
+/* ---- Géo sur carte ---- */
+.kk-card-geo{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--brume);
+  margin-bottom:9px}
+.kk-card-geo-sep{opacity:.5}
+
+/* ---- Réglages réseau dans la fiche ---- */
+.kk-cap{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--laiton);margin:4px 0 11px}
+.kk-reglages{display:flex;flex-direction:column;gap:13px;margin-bottom:16px;
+  background:var(--pont);border:1px solid var(--corde);border-radius:14px;padding:15px}
+.kk-reg{display:flex;flex-direction:column;gap:7px}
+.kk-reg>span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--brume)}
+.kk-input{background:var(--planche);border:1px solid var(--corde);color:var(--ecume);
+  padding:10px 12px;border-radius:9px;font-size:13px;outline:none;font-family:monospace}
+.kk-rot{display:flex;align-items:center;gap:11px}
+.kk-stepper-sm{border-radius:9px}
+.kk-stepper-sm button{width:36px;height:36px;font-size:17px}
+.kk-stepper-sm input{width:60px;height:36px;font-size:16px}
+.kk-rot-unit{font-size:13px;color:var(--brume)}
+.kk-ipnow{background:var(--planche);border:1px dashed var(--corde);border-radius:10px;
+  padding:11px 13px;font-size:12px;color:var(--brume);display:flex;flex-direction:column;gap:3px}
+.kk-ipnow strong{color:var(--ecume);font-family:monospace}
+.kk-ipnow-sub{font-size:11px;opacity:.8}
+
+/* ---- Débogage ---- */
+.kk-debug{background:var(--abysse);border:1px solid var(--corde);border-radius:11px;
+  padding:11px 13px;display:flex;flex-direction:column;gap:6px}
+.kk-debug-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.kk-debug-row span{color:var(--brume)}
+.kk-debug-row code{color:var(--laiton);font-family:monospace;font-size:11px}
 
 *:focus-visible{outline:2px solid var(--laiton);outline-offset:2px;border-radius:8px}
 `;
